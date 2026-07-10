@@ -24,17 +24,22 @@ jobs:
       - name: Checkout to repo
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
       - name: Setup Node.Js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "pnpm"
 
-      - name: Install dependencies
-        run: pnpm ci
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build site
-        run: pnpm build
+        run: pnpm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
