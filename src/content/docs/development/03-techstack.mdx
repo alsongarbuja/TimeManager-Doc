@@ -1,0 +1,42 @@
+---
+title: Tech Stack
+description: Architectural overview and dependencies used across the project.
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+This project is engineered on top of the **.NET Core** ecosystem. The accompanying framework dependencies, utilities, and development tools have been carefully chosen for optimal integration, type safety, and rapid development cycles.
+
+---
+
+## Core Ecosystem
+
+<CardGrid staggered>
+  <Card title="C# & .NET Core" icon="setting">
+    The foundational language and runtime, leveraging modern object-oriented paradigms and high-performance execution.
+  </Card>
+  <Card title="ASP.NET Core & Blazor" icon="laptop">
+    Used for building a unified, robust architecture featuring an **ASP.NET Web API** backend paired with a reactive **Blazor** frontend.
+  </Card>
+  <Card title="Microsoft SQL Server" icon="add-document">
+    Our primary relational database engine, managed locally via **SQL Server Management Studio (SSMS)**.
+  </Card>
+</CardGrid>
+
+---
+
+## Infrastructure & Packages
+
+### Identity & Security
+*   **ASP.NET Core Identity EF Core (v9):** Handles robust, extensible user authentication, authorization, and session management.
+*   **DotNetEnv (v3):** Dynamically loads environmental configurations from local `.env` files into the application context.
+
+### Utilities & Logging
+*   **ClosedXML (v0.105.0):** A lightweight, strongly-typed .NET companion used for server-side Excel report generation without requiring Interop.
+*   **Serilog (v3):** Extends the native ILogger interface to provide robust, structured file and console logging capability.
+
+### UI & Presentation
+*   **Visual Studio:** The primary IDE utilized for continuous debugging, package management, and system deployment.
+*   **Remix Icons:** Integrated cleanly via a CDN to supply a modern, lightweight vector icon library for the interface.
+
+---

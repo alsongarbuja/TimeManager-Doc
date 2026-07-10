@@ -1,0 +1,58 @@
+---
+title: Getting Started
+description: Set up your local development environment and launch the project.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+Welcome to the project! Follow this guide to configure your environment, set up the database, and run both the frontend and backend applications.
+
+### Prerequisites
+
+Ensure you have the following tools installed before proceeding for the best development experience:
+
+*   **Visual Studio** (with the **.NET Core development** workload enabled)
+*   **SQL Server Management Studio (SSMS)** or your preferred SQL database client
+
+---
+
+## Steps to get you started
+
+<Steps>
+
+1.  **Clone the Repository**
+
+    Acquire the latest source code directly from the **IT Department** for the most up-to-date version. Alternatively, you can clone the repository from **GitHub** (note: the GitHub main branch may occasionally trail internal releases).
+
+2.  **Configure Environment Variables**
+
+    Navigate to the `TimeManager.Backend` directory and create a new file named `.env`. You can copy the contents of `.env.example` as a template and update the fields with your local credentials.
+
+3.  **Initialize the Database**
+
+    Open SQL Server Management Studio (SSMS), connect to your local server instance, and create a new empty database matching the name specified in your `.env` connection string.
+
+4.  **Apply Database Migrations**
+
+    Run the Entity Framework migrations to schema-map your database. You can do this in one of two ways:
+
+    *   **Package Manager Console (Visual Studio):**
+    ```bash title="TimeManager"
+    Update-Database
+    ```
+    *   **Standard Terminal:** Inside the backend directory.
+    ```bash title="/TimeManager.Backend"
+    dotnet ef database update
+    ```
+
+5.  **Configure Startup Projects (Optional)**
+
+    For an optimal workflow, configure Visual Studio's **Multiple Startup Projects** settings to launch both the Blazor frontend and the ASP.NET Web API backend simultaneously.
+
+</Steps>
+
+---
+
+<Aside type="caution" title="Security Best Practice">
+  Never commit your `.env` file to version control. Ensure it is included in your `.gitignore` to prevent leaking local credentials.
+</Aside>
