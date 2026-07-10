@@ -1,0 +1,54 @@
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  ASTRO_TELEMETRY_DISABLED: true
+
+jobs:
+  build:
+    name: Build Astro Starlight site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout to repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.Js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm ci
+
+      - name: Build site
+        run: pnpm build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./dist"
+
+  deploy:
+    name: Deploy to github pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
