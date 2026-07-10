@@ -7,7 +7,10 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Time manager Doc",
-      customCss: ["./src/fonts/font-face.css", "./src/styles/custom.css"],
+      customCss: [
+        "@fontsource-variable/montserrat/wght.css",
+        "./src/styles/custom.css",
+      ],
       social: [
         {
           icon: "github",
