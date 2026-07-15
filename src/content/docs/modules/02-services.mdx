@@ -1,0 +1,180 @@
+---
+title: Application Services
+description: Decoupling business logic from controllers using the Service Pattern and Dependency Injection.
+---
+
+While the MVC pattern provides a solid structure for organizing your user interface, relying *only* on Controllers to process data can quickly turn them into bloated, hard-to-maintain files.
+
+To keep our codebase clean, scalable, and testable, we enforce a **Thin Controller, Rich Service** architecture. We extract our core business rules out of the controllers and place them into a dedicated **Service Layer**, structured using **Interfaces** and **Service Classes**.
+
+---
+
+## Why Separate Controllers and Services?
+
+At first glance, calling the database directly from a controller seems simple. However, as an application grows, this approach introduces several critical flaws:
+
+| Attribute | Controllers with Inline Logic | Controllers using Services |
+| :--- | :--- | :--- |
+| **Responsibility** | Handles HTTP routing, request validation, AND business logic (violates Single Responsibility). | Act as traffic controllers. They handle HTTP concerns and delegate logic. |
+| **Reusability** | Logic is trapped inside a controller action. Cannot be reused by background workers or APIs. | Business logic is centralized in services and can be called from anywhere. |
+| **Testability** | Highly difficult to unit test without mocking HTTP contexts, routes, and database connections. | Exceptionally easy to unit test by injecting mocked interfaces. |
+| **Maintainability** | A change in database structure or external API requires rewriting controllers. | Changes are isolated to the service implementation. The controller remains untouched. |
+
+---
+
+## The Role of Interfaces
+
+Instead of referencing a concrete service class directly, our controllers depend on **Interfaces** (e.g., `IRoleService` instead of `RoleService`).
+
+```mermaid
+graph LR
+    Controller[RoleController] -->|Depends On| Interface(IRoleService)
+    Interface -->|Implemented By| ServiceClass(RoleService)
+    ServiceClass -->|Queries| DbContext[ApplicationDbContext]
+```
+
+### 1. Loose Coupling
+
+An interface acts as a formal contract. The controller knows *what* methods are available (e.g., `CreateRoleAsync()`), but has absolutely no idea *how* they are executed. This means you can completely swap out the underlying database technology or add caching without changing a single line of controller code.
+
+### 2. Dependency Injection (DI)
+
+ASP.NET Core has built-in Dependency Injection. At runtime, the framework automatically resolves interfaces to their concrete implementations based on our application startup configurations:
+
+```csharp
+// Program.cs
+builder.Services.AddScoped<IRoleService, RoleService>();
+
+```
+
+### 3. Effortless Unit Testing
+
+When writing unit tests for your controller, you don't want to hit a real database or write to disk. By using interfaces, you can easily supply a fake (mocked) version of the service to test how your controller handles different outcomes.
+
+---
+
+## Code Example: The Service Layer in Action
+
+Let's look at how we split responsibilities when creating a user role.
+
+### 1. The Interface (The Contract)
+
+```csharp
+// Services/Interfaces/IRoleService.cs
+using System.Threading.Tasks;
+
+namespace TimeManager.Backend.Services.Interfaces
+{
+    public interface IRoleService
+    {
+        Task<bool> IsRoleNameUniqueAsync(string name);
+        Task<bool> CreateRoleAsync(string name, string? description);
+    }
+}
+
+```
+
+### 2. The Service Implementation (The Muscle)
+
+This is where database calls, audit logging, and core validation rules live.
+
+```csharp
+// Services/Implementations/RoleService.cs
+using System;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using TimeManager.Backend.Data;
+using TimeManager.Backend.Domain;
+using TimeManager.Backend.Services.Interfaces;
+
+namespace TimeManager.Backend.Services.Implementations
+{
+    public class RoleService : IRoleService
+    {
+        private readonly ApplicationDbContext _context;
+
+        public RoleService(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<bool> IsRoleNameUniqueAsync(string name)
+        {
+            return !await _context.Roles.AnyAsync(r => r.Name.ToLower() == name.ToLower());
+        }
+
+        public async Task<bool> CreateRoleAsync(string name, string? description)
+        {
+            if (!await IsRoleNameUniqueAsync(name))
+            {
+                return false;
+            }
+
+            var role = new Role
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+
+            _context.Roles.Add(role);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+    }
+}
+
+```
+
+### 3. The Controller (The Coordinator)
+
+Notice how clean the controller becomes. It only validates the incoming model, calls the service, and decides which view to display.
+
+```csharp
+// Controllers/RoleController.cs
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using TimeManager.Backend.Services.Interfaces;
+using TimeManager.Backend.ViewModels;
+
+namespace TimeManager.Backend.Controllers
+{
+    public class RoleController : Controller
+    {
+        private readonly IRoleService _roleService;
+
+        // The interface is injected automatically here
+        public RoleController(IRoleService roleService)
+        {
+            _roleService = roleService;
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create(RoleViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var success = await _roleService.CreateRoleAsync(model.Name, model.Description);
+
+            if (!success)
+            {
+                ModelState.AddModelError("Name", "A role with this name already exists.");
+                return View(model);
+            }
+
+            return RedirectToAction("Index");
+        }
+    }
+}
+
+```
+
+---
+
+:::tip Summary
+Keep your **Controllers thin** and your **Services rich**. The controller's only job is to handle the HTTP protocol lifecycle (handling status codes, routing, binding user inputs, and returning views). All core logical computations belong safely in your service classes.
+:::
