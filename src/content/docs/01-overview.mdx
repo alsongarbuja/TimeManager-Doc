@@ -1,0 +1,66 @@
+---
+title: Project Overview
+description: A comprehensive introduction to the TimeManager ecosystem, its goals, and architecture.
+---
+
+import { Card, CardGrid, Aside, LinkCard, Image } from '@astrojs/starlight/components';
+
+## Purpose & Scope
+
+**TimeManager** is an enterprise-grade tracking and productivity suite designed to bridge the gap between back-office reporting and client-facing interfaces. The platform simplifies time allocation logging, department resources management, and administrative tracking while keeping data strictly secure and easily auditable.
+
+By decoupling a high-performance **ASP.NET Core Web API** from a rich, single-page **Blazor WebAssembly** frontend, the system guarantees instant page transitions for users on the ground while maintaining robust, server-side data consistency.
+
+---
+
+## Core System Architecture
+
+Our software architecture follows modern clean architecture principles to isolate core business rules from external dependencies.
+
+{/* <Image src="image_agent_tag_14509991558741005217" alt="ASP.NET Core Clean Architecture layers diagram showing Web App, Core Project, Infrastructure, and Data Sources." caption="TimeManager System Architecture" /> */}
+
+---
+
+## Key Features
+
+The system is optimized to handle high-frequency data inputs and deliver on-demand reporting with zero latency.
+
+<CardGrid staggered>
+  <Card title="Interactive Dashboards" icon="random">
+    A rich Blazor WebAssembly frontend offering interactive, responsive views for managing time logs, tasks, and team resource schedules.
+  </Card>
+  <Card title="Excel Report Generation" icon="document">
+    On-the-fly generation of Excel audit sheets utilizing **ClosedXML**, removing server-side dependency on heavy office runtimes.
+  </Card>
+  <Card title="Robust Audit Logging" icon="magnifier">
+    Extended internal logging pipelines running **Serilog v3** to ensure administrative actions are fully auditable, structured, and persisted safely.
+  </Card>
+  <Card title="Secure Identity Management" icon="list-format">
+    Out-of-the-box secure credential processing, role management, and session controls built directly onto **Entity Framework Core Identity**.
+  </Card>
+</CardGrid>
+
+---
+
+## Tech Stack Snapshot
+
+The core components driving the project ecosystem:
+
+| Tier | Technology / Package | Purpose |
+| :--- | :--- | :--- |
+| **Frontend** | Blazor WebAssembly (Wasm) | Single-page interactive client application |
+| **Backend** | ASP.NET Core Web API | RESTful backend endpoints & controller logic |
+| **Database** | MS SQL Server & EF Core 9 | Schema modeling, migrations, and storage |
+| **UI Kit** | Remix Icons (via CDN) | Scalable vector graphic design components |
+
+---
+
+<Aside type="tip" title="Ready to dive in?">
+  Now that you understand the big-picture architecture of the project, head over to the next guide to set up your environment locally and configure your database.
+</Aside>
+
+<LinkCard
+  title="Get Started with Local Development"
+  description="Follow the step-by-step instructions to clone the repository, run database migrations, and launch the application locally."
+  href="../development/02-gettingstarted/"
+/>
