@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import mermaid from "astro-mermaid";
 
 // https://astro.build/config
 export default defineConfig({
@@ -22,18 +23,27 @@ export default defineConfig({
       ],
       sidebar: [
         {
+          label: "Overview",
+          slug: "01-overview",
+        },
+        {
           label: "Development",
           items: [{ autogenerate: { directory: "development" } }],
         },
-        // {
-        //   label: "Guides",
-        //   items: [{ label: "Example Guide", slug: "guides/example" }],
-        // },
-        // {
-        //   label: "Reference",
-        //   items: [{ autogenerate: { directory: "reference" } }],
-        // },
+        {
+          label: "Modules",
+          items: [{ autogenerate: { directory: "modules" } }],
+        },
+        {
+          label: "Components",
+          items: [{ autogenerate: { directory: "components" } }],
+        },
+        {
+          label: "Production",
+          items: [{ autogenerate: { directory: "production" } }],
+        },
       ],
     }),
+    mermaid(),
   ],
 });
