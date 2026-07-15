@@ -1,0 +1,342 @@
+---
+title: Custom Partial Views & Tag Helpers
+description: Guide to building reusable UI components in ASP.NET Core using Shared Partial Views and Tag Helpers.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+In ASP.NET Core, **Custom Partial Views** act as reusable UI components—highly comparable to components in frameworks like React—allowing you to maintain a DRY (Don't Repeat Yourself) codebase across your presentation layer.
+
+This project utilizes two distinct styles of reusable views:
+1.  **Shared Partial Views:** Simple, strongly-typed components driven by standard Razor templates.
+2.  **Tag Helpers:** Complex components that extend or modify HTML elements with custom tags and attributes during server-side rendering.
+
+---
+
+## 1. Shared Partial Views (Simple Components)
+
+Shared Partial Views are conventionally placed in the `Views/Shared/` directory. Because of this default search convention, ASP.NET Core automatically discovers and resolves them from any standard view in the system.
+
+These views receive their data context via a strongly-typed **View Model**.
+
+### Code Implementation
+
+Here is an example of a reusable table actions cell component (`ActionTd`) which displays context-dependent Edit and Delete buttons.
+
+<Tabs>
+  <TabItem label="Razor View (ActionTd.cshtml)" icon="document">
+    ```razor
+    // Views/Shared/ActionTd.cshtml
+    @model TimeManager.Backend.Models.Components.ActionTdViewModel
+
+    <td class="table-actions">
+        @if(Model.HasDelete)
+        {
+            <form method="post" asp-controller="@Model.Controller" asp-action="Delete" asp-route-id="@Model.Id" onsubmit="return confirm('Delete this resource?')">
+                @Html.AntiForgeryToken()
+                <button class="btn btn-action-delete">
+                    <i class="ri-delete-bin-7-line"></i>
+                </button>
+            </form>
+        }
+
+        @if(Model.HasEdit)
+        {
+            <a asp-controller="@Model.Controller" asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-action-edit">
+                <i class="ri-edit-line"></i>
+            </a>
+        }
+    </td>
+    ```
+  </TabItem>
+  <TabItem label="View Model (ActionTdViewModel.cs)" icon="setting">
+    ```csharp
+    // Models/Components/ActionTdViewModel.cs
+    namespace TimeManager.Backend.Models.Components
+    {
+       public class ActionTdViewModel
+       {
+           public bool HasDelete { get; set; } = true;
+           public bool HasEdit { get; set; } = true;
+           public string Controller { get; set; } = string.Empty;
+           public int Id { get; set; }
+       }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="note" title="C# Naming Conventions">
+  The properties inside the View Model are declared in `UpperCamelCase` (PascalCase), which is the standard naming practice in C# for public properties.
+</Aside>
+
+### How to Use Shared Partial Views
+
+To consume a Shared Partial View, call `Html.PartialAsync` from a parent Razor view. Pass the name of the template as the first parameter, and initialize a new instance of its corresponding View Model as the second parameter.
+
+```razor
+@* Views/Role/Index.cshtml *@
+@using TimeManager.Backend.Models.Components
+@using TimeManager.Backend.ViewModels
+@model IEnumerable<RoleViewModel>
+
+@{
+   Layout = "_ListWrapper";
+   ViewData["Title"] = "Role";
+   List<string> Headers = ["Name", "Description"];
+   ViewData["Headers"] = Headers;
+}
+
+@if (!Model.Any())
+{
+   <tr>
+       <td colspan="@Headers.Count" class="table-empty-cell">No data available</td>
+   </tr>
+}
+else
+{
+   foreach (var item in Model)
+   {
+       <tr class="table-row">
+           <td class="table-cell">@item.Name</td>
+           <td class="table-cell table-desc">@item.Description</td>
+
+           @* Render the Shared Partial View asynchronously *@
+           @await Html.PartialAsync("ActionTd", new ActionTdViewModel
+           {
+               Controller = "Role",
+               Id = item.Id
+           })
+       </tr>
+   }
+}
+```
+
+:::tip
+Learn about all shared partial views in the project in detail in the [Components section](#) section.
+:::
+
+## 2. Tag Helpers (Complex Components)
+
+Tag Helpers, like shared partial views, are reusable view components. However, instead of simply rendering data passed to them by parent views, they extend or modify HTML elements during server-side rendering. This exposes powerful functionality directly through HTML-like attributes and custom tags.
+
+### Why use Tag Helpers?
+The core motivation for choosing Tag Helpers over traditional shared partial views is **code maintainability**. Tag Helpers:
+* Integrate directly with native HTML elements.
+* Provide custom attributes that work seamlessly with Razor syntax.
+* Keep your views cleaner and much easier to read.
+
+---
+
+### Example: `CustomInputTagHelper`
+
+Below is an example of a Tag Helper in this project called `CustomInputTagHelper`. As the name suggests, it is a custom input element used inside forms.
+
+> **Project Structure Note:**
+> I have placed this file outside the `Views` folder and appended `TagHelper` to both its file and class name. This makes it instantly recognizable as a custom Tag Helper rather than a standard shared partial view.
+
+```csharp
+// TagHelpers/CustomInputTagHelper.cs
+
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Microsoft.AspNetCore.Razor.TagHelpers;
+
+namespace TimeManager.Backend.TagHelpers
+{
+   [HtmlTargetElement("custom-input", Attributes="asp-for")]
+   public class CustomInputTagHelper : TagHelper
+   {
+       [HtmlAttributeName("asp-for")]
+       public required ModelExpression For { get; set; }
+
+       [HtmlAttributeNotBound]
+       [ViewContext]
+       public ViewContext ViewContext { get; set; }
+
+       [HtmlAttributeName("classes")]
+       public string? Classes { get; set; }
+
+       [HtmlAttributeName("required")]
+       public bool? Required { get; set; }
+
+       public override void Process(TagHelperContext context, TagHelperOutput output)
+       {
+           var propertyName = For.Name;
+           var labelText = For.Metadata.DisplayName ?? For.Metadata.PropertyName ?? propertyName;
+           var isRequired = Required ?? For.Metadata.IsRequired;
+           var isMultiLine = For.Metadata.DataTypeName == "MultilineText";
+
+           var required = isRequired ? "<span class='form-required'>*</span>" : string.Empty;
+           var inputIsRequired = isRequired ? "required" : string.Empty;
+
+           var propertyValue = For.Model?.ToString() ?? string.Empty;
+
+           string type = "text";
+
+           if (For.Metadata.DataTypeName == "Password")
+           {
+               type = "password";
+           }
+           else if (For.Metadata.DataTypeName == "Time" || For.ModelExplorer.ModelType == typeof(TimeOnly) || For.ModelExplorer.ModelType == typeof(TimeOnly?))
+           {
+               type = "time";
+           }
+           else if (For.ModelExplorer.ModelType == typeof(int) || For.ModelExplorer.ModelType == typeof(int?) ||
+                    For.ModelExplorer.ModelType == typeof(decimal) || For.ModelExplorer.ModelType == typeof(decimal?))
+           {
+               type = "number";
+           }
+           else if (For.ModelExplorer.ModelType == typeof(DateTimeOffset) || For.ModelExplorer.ModelType == typeof(DateTimeOffset?) ||
+                    For.ModelExplorer.ModelType == typeof(DateTime) || For.ModelExplorer.ModelType == typeof(DateTime?))
+           {
+               type = "datetime-local";
+           }
+           else if (For.ModelExplorer.ModelType == typeof(IFormFile))
+           {
+               type = "file";
+           }
+
+           var formattedValue = propertyValue;
+
+           if (type == "datetime-local")
+           {
+               if (For.Model is DateTimeOffset dto)
+               {
+                   formattedValue = dto.ToLocalTime().ToString("yyyy-MM-ddTHH:mm");
+               }
+               else if (For.Model is DateTime dt)
+               {
+                   formattedValue = dt.ToLocalTime().ToString("yyyy-MM-ddTHH:mm");
+               }
+           }
+           else if (type == "time")
+           {
+               if (For.Model is TimeOnly t)
+               {
+                   formattedValue = t.ToString("HH:mm");
+               }
+           }
+
+           var hasErrors = ViewContext.ModelState.TryGetValue(propertyName, out var modelStateEntry) && modelStateEntry.Errors.Any();
+
+           var errorMessage = hasErrors ? modelStateEntry?.Errors.First().ErrorMessage : string.Empty;
+
+           var classes = hasErrors ? "form-input form-input-error" : "form-input";
+
+           var input = isMultiLine
+               ? $"<textarea name='{propertyName}' class='{classes}'>{System.Net.WebUtility.HtmlEncode(formattedValue)}</textarea>"
+               : $"<input name='{propertyName}' {inputIsRequired} value='{formattedValue}' class='{classes}' type='{type}' />";
+
+           if (type == "password")
+           {
+               input = $"<div class='password-toggle-wrapper'>" +
+                           $"{input}" +
+                           $"<button type='button' class='password-toggle-btn' onclick='togglePasswordVisibility(this)'>" +
+                               $"<i class='ri-eye-off-line'></i>" +
+                           $"</button>" +
+                       $"</div>";
+           }
+
+           if (type == "datetime-local")
+           {
+               input = $"<div class='datetime-clear-wrapper'>" +
+                           $"{input}" +
+                           $"<button type='button' class='datetime-clear-btn' onclick='this.previousElementSibling.value=\"\"; this.previousElementSibling.dispatchEvent(new Event(\"change\"))'>" +
+                               $"<i class='ri-close-line'></i>" +
+                           $"</button>" +
+                       $"</div>";
+           }
+
+           var errorSpan = hasErrors
+                  ? $"<span class='form-error'>{errorMessage}</span>"
+                  : string.Empty;
+
+           output.TagName = null;
+
+           output.Content.SetHtmlContent(
+               $"<div class='form-group {Classes}'>" +
+                   $"<label class='form-label'>{labelText}{required}</label>" +
+                   $"<div class='form-input-wrapper'>{input}</div>" +
+                   $"{errorSpan}" +
+               $"</div>"
+           );
+       }
+   }
+}
+```
+
+By setting up this single file, we can immediately start using the custom `<custom-input>` tag throughout any Razor view in our application. The rendered input type and UI rules are automatically inferred from the model's standard ASP.NET DataAnnotations.
+
+Here is the continuation of your MDX document, starting directly from the **Example usage** section. This has been styled to flow seamlessly from the previous part with clean headings, formatted file paths, and polished phrasing.
+
+### Usage
+
+Below is a practical implementation showing how the custom Tag Helper integrates with your models and Razor views to create clean, declarative markup.
+
+#### 1. Define the View Model
+
+We use standard ASP.NET `DataAnnotations` to define validation rules, display labels, and UI hints (such as specifying a multiline text area for the description).
+
+```csharp
+// ViewModels/RoleViewModel.cs
+
+using System.ComponentModel.DataAnnotations;
+
+namespace TimeManager.Backend.ViewModels
+{
+   public class RoleViewModel
+   {
+       public int Id { get; set; }
+
+       [Required(ErrorMessage = "Name is required")]
+       [MinLength(3, ErrorMessage = "Name must be at least 3 characters long")]
+       public string Name { get; set; } = string.Empty;
+
+       [StringLength(100, ErrorMessage = "Description cannot exceed 100 characters")]
+       [DataType(DataType.MultilineText)]
+       public string? Description { get; set; }
+   }
+}
+
+```
+
+#### 2. Implement in the Razor View
+
+Instead of writing custom wrappers, labels, and validation message tags for every field, we simply declare our custom `<custom-input>` tag.
+
+```razor
+// Views/Role/Create.cshtml
+
+@model TimeManager.Backend.ViewModels.RoleViewModel
+
+<!-- Layout markup and structural wrappers -->
+
+<form asp-controller="Role" asp-action="Create" method="post">
+   @Html.AntiForgeryToken()
+
+   <custom-input asp-for="Name" classes="grid-col-2" />
+   <custom-input asp-for="Description" classes="grid-col-2" />
+
+   <button type="submit" class="btn btn-primary">Submit</button>
+</form>
+
+```
+
+---
+
+### Why Tag helper
+
+As you can see, instead of using the traditional `@await Html.PartialAsync("_InputPartial", model)` syntax to call shared views, we use the natural HTML target identifier:
+
+`[HtmlTargetElement("custom-input", Attributes="asp-for")]`
+
+By referencing `<custom-input>` directly inside the Razor view, the engine handles the rendering logic in the background. The `RoleViewModel` (bound via the `@model` directive) seamlessly supplies:
+
+* The target property's **data type** (rendering a standard text input for `Name` vs. a `<textarea>` for the multiline `Description`).
+* The **display name** metadata for the field label.
+* The **validation rules and error messages** if the form submission fails.
+
+:::tip
+To see the full implementation details and configuration options of our custom Tag Helper views, check out the [Components section](#) section.
+:::
