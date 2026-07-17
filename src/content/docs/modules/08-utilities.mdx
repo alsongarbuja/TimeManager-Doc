@@ -1,3 +1,314 @@
 ---
 title: Utilities
+description: Stateless global helper structures and formatting functions.
 ---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `Utility` directory functions as a toolkit for stateless, global helper classes. These classes encapsulate repetitive logic that doesn't strictly belong to a specific business service or controller, ensuring our application logic remains DRY (Don't Repeat Yourself).
+
+```text
+TimeManager.Backend/
+└── Utility/
+    ├── ExpressionBuilder.cs       # Generic builder for dynamic LINQ expressions
+    ├── ModelValidationLog.cs      # CLI logging utility for MVC model state errors
+    └── PaginationValidation.cs    # Sanitization wrapper for pagination request limits
+
+```
+
+## The `ModelValidationLog` Class
+
+When ASP.NET Core validates an incoming request body against a View Model, it populates a `ModelStateDictionary` with any errors (e.g., missing fields, string length violations).
+
+The `ModelValidationLog` class simplifies extracting these errors and printing them cleanly to the server's terminal (or cloud logging pipeline). This is exceptionally useful for debugging API rejection responses.
+
+```csharp
+// Utility/ModelValidationLog.cs
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+
+namespace TimeManager.Backend.Utility
+{
+    public static class ModelValidationLog
+    {
+        public static void LogModelStateValidationFailedLogs<T>(ILogger<T> logger, ModelStateDictionary modelState)
+        {
+            var errors = modelState
+                .Where(x => x.Value?.Errors.Count > 0)
+                .Select(x => new
+                {
+                    x.Key,
+                    Errors = string.Join(", ", x.Value?.Errors.Select(e => e.ErrorMessage)!)
+                });
+
+            foreach (var error in errors)
+            {
+                logger.LogWarning($"Field: {error.Key} | Error: {error.Errors}");
+            }
+        }
+    }
+}
+
+```
+
+## The `PaginationValidation` Class
+
+To prevent malicious users from requesting an exorbitant amount of records (e.g., passing `pageSize=99999` and crashing the database), we sanitize pagination queries before processing them.
+
+The `PaginationValidation` class ensures that negative page numbers are clamped to `1`, sets reasonable fallback defaults for missing parameters, and handles sorting direction flags safely.
+
+```csharp
+namespace TimeManager.Backend.Utility
+{
+    public static class PaginationValidation
+    {
+        public static (int, int, string?, bool) ConvertToValidPaginationQueries(
+            PaginationQuery queries,
+            PaginationQuery? defaultQueries = null
+        ) {
+            int pageNumber = queries.PageNumber < 1 ? 1 : queries.PageNumber;
+            int pageSize = queries.PageSize < 1 ? 10 : queries.PageSize;
+            string? orderBy = queries.OrderBy;
+            bool isOrderDescending = queries.IsOrderDescending;
+
+            if (defaultQueries != null)
+            {
+                // Fallback to default queries if the user requested the standard root page
+                // without any specific ordering applied.
+                if (pageSize == 10 && pageNumber == 1 && string.IsNullOrEmpty(orderBy))
+                {
+                    pageSize = defaultQueries.PageSize;
+                    orderBy = defaultQueries.OrderBy;
+                    isOrderDescending = defaultQueries.IsOrderDescending;
+                }
+            }
+
+            return (pageNumber, pageSize, orderBy, isOrderDescending);
+        }
+    }
+}
+```
+
+## The `ExpressionBuilder` Class
+
+Hardcoding hundreds of specific Entity Framework Core `Where()` clauses for complex filtering dashboards is impossible to maintain.
+
+The `ExpressionBuilder` class is a powerful generic utility that constructs raw **LINQ Expressions** at runtime. You pass it a property name (e.g., `"DepartmentName"`), an operator (e.g., `Contains`), and a value, and it dynamically compiles the required C# logic tree to safely query the SQL database.
+
+```csharp
+// Utility/ExpressionBuilder.cs
+using System.Linq.Expressions;
+
+namespace TimeManager.Backend.Utility
+{
+    public class FilterCondition
+    {
+        public string PropertyName { get; set; } = string.Empty;
+        public FilterOperator Operator { get; set; }
+        public string? Value { get; set; }
+    }
+
+    public enum FilterOperator
+    {
+        Equals,
+        NotEquals,
+        GreaterThan,
+        LessThan,
+        GreaterThanOrEqual,
+        LessThanOrEqual,
+        Contains,
+        StartsWith,
+        EndsWith
+    }
+
+    public class ExpressionBuilder<T>
+    {
+        public Expression<Func<T, bool>>? BuildPredicate(FilterCondition filterCondition)
+        {
+            if (string.IsNullOrEmpty(filterCondition.PropertyName)) return null;
+
+            var parameter = Expression.Parameter(typeof(T), "x");
+            var property = Expression.Property(parameter, filterCondition.PropertyName);
+            var constant = BuildConstantExpression(filterCondition.Value, property.Type);
+
+            Expression comparison = filterCondition.Operator switch
+            {
+                FilterOperator.Equals => Expression.Equal(property, constant),
+                FilterOperator.NotEquals => Expression.NotEqual(property, constant),
+                FilterOperator.GreaterThan => Expression.GreaterThan(property, constant),
+                FilterOperator.LessThan => Expression.LessThan(property, constant),
+                FilterOperator.GreaterThanOrEqual => Expression.GreaterThanOrEqual(property, constant),
+                FilterOperator.LessThanOrEqual => Expression.LessThanOrEqual(property, constant),
+                FilterOperator.Contains => BuildContainsExpression(property, filterCondition.Value),
+                FilterOperator.StartsWith => BuildStringMethod(property, filterCondition.Value, "StartsWith"),
+                FilterOperator.EndsWith => BuildStringMethod(property, filterCondition.Value, "EndsWith"),
+                _ => throw new NotSupportedException($"Operator {filterCondition.Operator} not supported")
+            };
+
+            return Expression.Lambda<Func<T, bool>>(comparison, parameter);
+        }
+
+        private Expression BuildContainsExpression(MemberExpression property, object? value)
+        {
+            if (property.Type != typeof(string))
+            {
+                throw new NotSupportedException("Contains is only supported for string properties");
+            }
+
+            var method = typeof(string).GetMethod("Contains", new[] { typeof(string) });
+            var constant = Expression.Constant(value?.ToString() ?? string.Empty);
+            return Expression.Call(property, method!, constant);
+        }
+
+        private Expression BuildStringMethod(MemberExpression property, object? value, string methodName)
+        {
+            if (property.Type != typeof(string))
+            {
+                throw new NotSupportedException($"{methodName} is only supported for string properties");
+            }
+
+            var method = typeof(string).GetMethod(methodName, new[] { typeof(string) });
+            var constant = Expression.Constant(value?.ToString() ?? string.Empty);
+            return Expression.Call(property, method!, constant);
+        }
+
+        private Expression BuildConstantExpression(object? value, Type targetType)
+        {
+            if (value == null)
+            {
+                if (targetType.IsValueType && Nullable.GetUnderlyingType(targetType) == null)
+                {
+                    throw new InvalidOperationException($"Cannot compare non-nullable type {targetType.Name} with null");
+                }
+                return Expression.Constant(null, targetType);
+            }
+
+            var underlyingType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+            var converted = Convert.ChangeType(value, underlyingType);
+            var constant = Expression.Constant(converted, underlyingType);
+
+            return underlyingType == targetType ? constant : Expression.Convert(constant, targetType);
+        }
+    }
+}
+
+```
+
+## Example Usage
+
+<Tabs>
+  <TabItem label="ModelValidationLog">
+    ```csharp ins={2, 12}
+      // other imports
+      using TimeManager.Backend.Utility;
+
+      [AllowAnonymous]
+      [HttpPost]
+      [ValidateAntiForgeryToken]
+      public async Task<IActionResult> Login(LoginViewModel model, string? returnUrl = null)
+      {
+          if (!ModelState.IsValid)
+          {
+              logger.LogWarning("Login failed: Model validation failed");
+              ModelValidationLog.LogModelStateValidationFailedLogs(logger, ModelState);
+              return View(model);
+          }
+
+          // rest of the login logic
+
+          return View(model);
+      }
+    ```
+  </TabItem>
+  <TabItem label="PaginationValidation">
+    ```csharp ins={2, 11-12}
+    // ... other imports
+    using TimeManager.Backend.Utility;
+
+    public async Task<PagedResponse<PunchViewModel>> GetPunchesAsync(
+        int? departmentId,
+        PaginationQuery pagFilter,
+        FilterCondition filter,
+        PaginationQuery defaultQuery
+      )
+    {
+      // Using the pagination validation to get proper sanitized pagination query values
+      (int pageNumber, int pageSize, string? orderBy, bool isOrderDescending) = PaginationValidation.ConvertToValidPaginationQueries(pagFilter, defaultQuery);
+
+      Expression<Func<PunchEntry, object>>? orderExpression = orderBy?.ToLower() switch
+      {
+          "name" => pe => pe.JobProfile.Employee.FirstName,
+          "clock in" => pe => pe.ClockIn,
+          "clock out" => pe => pe.ClockOut,
+          _ => pe => pe.ClockIn,
+      };
+
+      var builder = new ExpressionBuilder<PunchEntry>();
+      var whereExpression = filter.Value == "-404" ? null : builder.BuildPredicate(filter);
+
+      (var punches, int totalRecords) = await context.PunchEntry.FindWithPaginationAsync(
+          pe => new PunchViewModel
+          {
+              Id = pe.Id,
+              ClockInTime = pe.ClockIn,
+              ClockOutTime = pe.ClockOut,
+              EmployeeId = pe.JobProfile.Id,
+              Name = $"{pe.JobProfile.Employee.FirstName} {pe.JobProfile.Employee.LastName}"
+          },
+          ((pageNumber - 1) * pageSize),
+          pageSize,
+          whereExpression,
+          orderExpression,
+          isOrderDescending
+          );
+
+      return new PagedResponse<PunchViewModel>(punches, pageNumber, pageSize, totalRecords, orderBy, isOrderDescending);
+    }
+    ```
+  </TabItem>
+  <TabItem label="ExpressionBuilder">
+    ```csharp ins={2, 22-23, 36}
+    // ... other imports
+    using TimeManager.Backend.Utility;
+
+    public async Task<PagedResponse<PunchViewModel>> GetPunchesAsync(
+        int? departmentId,
+        PaginationQuery pagFilter,
+        FilterCondition filter,
+        PaginationQuery defaultQuery
+      )
+    {
+      // Using the pagination validation to get proper sanitized pagination query values
+      (int pageNumber, int pageSize, string? orderBy, bool isOrderDescending) = PaginationValidation.ConvertToValidPaginationQueries(pagFilter, defaultQuery);
+
+      Expression<Func<PunchEntry, object>>? orderExpression = orderBy?.ToLower() switch
+      {
+          "name" => pe => pe.JobProfile.Employee.FirstName,
+          "clock in" => pe => pe.ClockIn,
+          "clock out" => pe => pe.ClockOut,
+          _ => pe => pe.ClockIn,
+      };
+
+      var builder = new ExpressionBuilder<PunchEntry>();
+      var whereExpression = filter.Value == "-404" ? null : builder.BuildPredicate(filter);
+
+      (var punches, int totalRecords) = await context.PunchEntry.FindWithPaginationAsync(
+          pe => new PunchViewModel
+          {
+              Id = pe.Id,
+              ClockInTime = pe.ClockIn,
+              ClockOutTime = pe.ClockOut,
+              EmployeeId = pe.JobProfile.Id,
+              Name = $"{pe.JobProfile.Employee.FirstName} {pe.JobProfile.Employee.LastName}"
+          },
+          ((pageNumber - 1) * pageSize),
+          pageSize,
+          whereExpression,
+          orderExpression,
+          isOrderDescending
+          );
+
+      return new PagedResponse<PunchViewModel>(punches, pageNumber, pageSize, totalRecords, orderBy, isOrderDescending);
+    }
+    ```
+  </TabItem>
+</Tabs>

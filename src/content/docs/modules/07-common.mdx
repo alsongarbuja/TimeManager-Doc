@@ -1,3 +1,148 @@
 ---
-title: Common
+title: Common Configurations
+description: Managing global constants and shared configurations across the TimeManager architecture.
 ---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `Common` directory acts as a centralized repository for global configuration files and static variables. Placing these shared values in a single location prevents "magic strings" from being hardcoded across the codebase, ensuring that core definitions—such as user roles—are consistent across both the backend logic and the Razor views.
+
+```text
+TimeManager.Backend/
+└── Common/
+    └── AppConstants.cs    # Global application constants and static array helpers
+
+```
+
+## The `AppConstants` Class
+
+The `AppConstants` file holds immutable static variables used to manage system-wide behaviors.
+
+For example, our Role Management definitions are stored here. Instead of typing `"SuperAdmin"` manually throughout various authorization checks, we reference `AppConstants.SUPER_ADMIN_ROLE`. We also utilize static methods to return predefined arrays of roles, which is highly useful when iterating over permission groups.
+
+```csharp
+// Common/AppConstants.cs
+namespace TimeManager.Backend.Common
+{
+    public static class AppConstants
+    {
+        // Explicit Role Definitions
+        public const string SUPER_ADMIN_ROLE = "SuperAdmin";
+        public const string ADMIN_ROLE = "Admin";
+        public const string MANAGER_ROLE = "Manager";
+        public const string LEAD_ROLE = "Lead";
+        public const string EMPLOYEE_ROLE = "Employee";
+        public const string TEMP_EMPLOYEE_ROLE = "Temp Employee";
+        public const string STUDENT_ROLE = "Student Employee";
+
+        // Grouped Role Helpers
+        public static string[] AllRoles() =>
+        [
+            SUPER_ADMIN_ROLE,
+            ADMIN_ROLE,
+            MANAGER_ROLE,
+            LEAD_ROLE,
+            EMPLOYEE_ROLE,
+            TEMP_EMPLOYEE_ROLE,
+            STUDENT_ROLE
+        ];
+
+        public static string[] AdminRoles() =>
+        [
+            SUPER_ADMIN_ROLE,
+            ADMIN_ROLE
+        ];
+
+        public static string[] TopLevelRoles() =>
+        [
+            SUPER_ADMIN_ROLE,
+            ADMIN_ROLE,
+            MANAGER_ROLE
+        ];
+
+        public static string[] EmployeeRoles() =>
+        [
+            EMPLOYEE_ROLE,
+            TEMP_EMPLOYEE_ROLE,
+            STUDENT_ROLE,
+            LEAD_ROLE
+        ];
+    }
+}
+
+```
+
+---
+
+## Example Usage
+
+Because `AppConstants` is publicly accessible, it can be seamlessly consumed by both server-side logic (like database seeders) and client-side presentation layers (like Razor views).
+
+<Tabs>
+  <TabItem label="Data/DataSeeder.cs" icon="document">
+  ```csharp ins={2, 12-18}
+  using Microsoft.AspNetCore.Identity;
+  using TimeManager.Backend.Common; // Import the common namespace
+
+  namespace TimeManager.Backend.Data
+  {
+      public static class DataSeeder
+      {
+          private static async Task SeedIdentityAsync(UserManager<User> userManager, RoleManager<Role> roleManager)
+          {
+              // Utilize the constants to define the initial roles
+              var roles = new[] {
+                  new Role { Name = AppConstants.SUPER_ADMIN_ROLE, Description = "Super user with global access" },
+                  new Role { Name = AppConstants.ADMIN_ROLE, Description = "Admin user with departmental access" },
+                  new Role { Name = AppConstants.MANAGER_ROLE, Description = "Department manager" },
+                  new Role { Name = AppConstants.EMPLOYEE_ROLE, Description = "Full-time employee" },
+                  new Role { Name = AppConstants.STUDENT_ROLE, Description = "Student employee" },
+                  new Role { Name = AppConstants.LEAD_ROLE, Description = "Team lead" },
+                  new Role { Name = AppConstants.TEMP_EMPLOYEE_ROLE, Description = "Temporary worker" },
+              };
+
+              foreach (var role in roles)
+              {
+                  if (!await roleManager.RoleExistsAsync(role.Name!))
+                  {
+                      await roleManager.CreateAsync(role);
+                  }
+              }
+
+              // logic to seed roles and user in initial setup
+          }
+      }
+  }
+  ```
+  </TabItem>
+  <TabItem label="Views/Unit/Create.cshtml" icon="document">
+  ```razor ins={2, 19-23}
+  @model TimeManager.Backend.ViewModels.UnitViewModel
+  @using TimeManager.Backend.Common <!-- Import the common namespace -->
+
+  @{
+      Layout = "_FormWrapper";
+      ViewData["Title"] = "Unit - Add";
+      ViewData["ModuleTitle"] = "Create Unit";
+      ViewData["ModuleSubtitle"] = "Add new unit";
+      ViewData["Controller"] = "Unit";
+  }
+
+  <form asp-controller="Unit" asp-action="Create" method="post">
+      @Html.AntiForgeryToken()
+
+      <custom-input asp-for="Name" />
+      <custom-input asp-for="Index" />
+      <custom-input asp-for="Description" classes="grid-col-2" />
+
+      <!-- Render the department dropdown ONLY if the user is a Super Admin -->
+      @if (User.IsInRole(AppConstants.SUPER_ADMIN_ROLE))
+      {
+          <custom-select asp-for="DepartmentId" asp-items="@Model.Departments" classes="grid-col-2" />
+      }
+
+      <button type="submit" class="btn btn-primary">Submit</button>
+  </form>
+  ```
+  </TabItem>
+</Tabs>

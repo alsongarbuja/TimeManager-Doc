@@ -1,3 +1,134 @@
 ---
-title: Layout
+title: View Layouts
+description: Architecture of reusable UI shell utilizing ASP.NET Core Razor nested layouts.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Layouts in ASP.NET Core Razor function as reusable visual shells that wrap multiple pages, ensuring structural and styling consistency across the user interface. This project leverages **Nested Layouts** within Razor's shared view infrastructure to cleanly separate global document setups from authenticated application dashboards.
+
+```text
+Views/
+└── Shared/                # Shared layout templates and partial components
+    ├── _MainLayout.cshtml  # Core global HTML document shell
+    └── _AdminLayout.cshtml # Authenticated dashboard UI configuration
+
+```
+
+---
+
+## 1. Global Shell: `_MainLayout.cshtml`
+
+The `_MainLayout` file defines the baseline global `HTML` structure. It acts as the ultimate root template, embedding universal font styles, global CSS styling layers, third-party CDN assets (like Remix Icons), and core rendering portals.
+
+```razor title="Views/Shared/_MainLayout.cshtml"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - TimeManager</title>
+
+    <!-- Global Fonts -->
+    <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
+    <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Karla:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+
+    <!-- Stylesheet Architecture -->
+    <link href="/css/app.css" rel="stylesheet" />
+    <link href="/css/utility.css" rel="stylesheet" />
+    <link href="/css/components.css" rel="stylesheet" />
+    <link href="/css/layout.css" rel="stylesheet" />
+    <link href="/css/wrapper.css" rel="stylesheet" />
+
+    <!-- Vector Assets -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet" />
+
+    <!-- View-Specific Head Overrides -->
+    @await RenderSectionAsync("styles", required: false)
+</head>
+<body>
+    <div class="app-root">
+        @RenderBody()
+    </div>
+
+    <!-- View-Specific Deferred Scripts -->
+    @await RenderSectionAsync("scripts", required: false)
+</body>
+</html>
+
+```
+
+---
+
+## 2. Component Shell: `_AdminLayout.cshtml`
+
+The `_AdminLayout` serves as a **nested sub-layout** that references `_MainLayout` as its parent core container. It assembles the management layout system, embedding structural navigation, headers, notification banners, and modal overlay hooks.
+
+```razor title="Views/Shared/_AdminLayout.cshtml"
+@{
+    Layout = "_MainLayout";
+}
+
+<!-- Forward nested child page configurations up to the parent MainLayout shell -->
+@section styles {
+    @await RenderSectionAsync("styles", required: false)
+}
+@section scripts {
+    <script src="~/js/sidebartoggle.js"></script>
+    <script src="~/js/notification.js"></script>
+    <script src="~/js/modal.js"></script>
+    @await RenderSectionAsync("scripts", required: false)
+}
+
+<main class="layout-main">
+    <!-- Navigation Infrastructure Component -->
+    @await Html.PartialAsync("Sidenav")
+
+    <div class="layout-section">
+        <header class="header">
+            <button class="menu-btn" onclick="sidebarToggle()" aria-label="Toggle Sidebar">
+                <i class="ri-menu-line"></i>
+            </button>
+
+            <form asp-controller="Auth" asp-action="Logout" method="post">
+                @await Html.PartialAsync("Button", new TimeManager.Backend.ViewModels.PartialViews.ButtonViewModel
+                {
+                    Id = "btn-session-logout",
+                    Classes = "btn-logout",
+                    Text = "Logout",
+                    Type = "submit"
+                })
+            </form>
+        </header>
+
+        <section class="main-section" id="main-content" tabindex="-1" role="main">
+            <!-- Inject sub-child application dashboard content -->
+            @RenderBody()
+        </section>
+    </div>
+</main>
+
+<!-- Unified System Overlay Portals -->
+<div class="modal-overlay">
+    <div class="modal-wrapper">
+        @await RenderSectionAsync("modalcontent", required: false)
+    </div>
+</div>
+
+<!-- Reactive Notification Infrastructure Component -->
+@await Html.PartialAsync("NotificationToast")
+
+```
+
+---
+
+## Technical Mechanics: Layout Composition Blocks
+
+To customize page requirements cleanly, Razor provides three distinct template rendering blocks. Here is how they differ architecturally:
+
+| Mechanism | Processing Type | Core Use Case |
+| --- | --- | --- |
+| **`@RenderBody()`** | System Default Injection | Injects the primary page view's file markup directly into the layout area. Only one main body block can exist per layout file. |
+| **`@RenderSectionAsync()`** | Named Template Portals | Allocates named code drop slots (e.g., `styles`, `scripts`, `modalcontent`). Allows individual child pages to safely project custom assets into specialized locations without shifting adjacent DOM targets. |
+| **`@Html.PartialAsync()`** | Reusable File Fragments | Synchronously or asynchronously reads standalone partial files (e.g., `Sidenav`, `Button`) and parses their HTML content dynamically inline. |

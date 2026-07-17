@@ -1,3 +1,160 @@
 ---
-title: Wrapper
+title: View Wrappers
+description: Architecture of reusable UI shell wrappers utilizing ASP.NET Core Razor nested layouts.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
+
+In this architecture, **Wrappers** function identically to Layouts (`_MainLayout`, `_AdminLayout`) under the hood—they are nested Razor layout files. However, while Layouts manage global *structural* concerns (like navigation and head tags), **Wrappers manage specific *content patterns***.
+
+By extracting repetitive container boilerplate (like table headers, pagination controls, and form shells) into dedicated Wrapper files, we keep our individual CRUD views incredibly thin and maintainable.
+
+```text
+Views/
+└── Shared/
+    ├── _ListWrapper.cshtml  # Standardized shell for data tables and pagination logic
+    └── _FormWrapper.cshtml  # Standardized shell for data entry and edit forms
+
+```
+
+---
+
+## 1. The List Wrapper (`_ListWrapper.cshtml`)
+
+The `_ListWrapper` acts as the master template for all grid/table views in the Content Management System (CMS).
+
+Instead of rewriting table headers, page titles, "Create New" buttons, and pagination scripts on every single index page, the child view simply passes a `ViewData` dictionary up to this wrapper. The wrapper dynamically builds the table shell, and the child view only has to render the `<tbody>` rows via `@RenderBody()`.
+
+```razor title="Views/Shared/_ListWrapper.cshtml"
+@{
+    Layout = "_AdminLayout"; // Inherit the global authenticated layout
+
+    // Extract metadata injected by the child view
+    var headers = ViewData["Headers"] as List<string>;
+    bool hasCreate = ViewData["HasCreate"] as bool? ?? true;
+    var controller = ViewData["Controller"] as string;
+    var hasAction = ViewData["HasAction"] as string;
+
+    // Pagination Related ViewData
+    // ...
+}
+
+<div class="page-container">
+    <div class="page-content-wrapper">
+
+        <!-- Dynamic Page Header -->
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">@ViewData["ModuleTitle"]</h1>
+                <p class="page-subtitle">@ViewData["ModuleDesc"]</p>
+            </div>
+
+            <div class="create-fields">
+                @await RenderSectionAsync("CustomCreate", required: false)
+
+                @if (IsSectionDefined("modalcontent"))
+                {
+                    @section modalcontent {
+                        @await RenderSectionAsync("modalcontent", required: false)
+                    }
+                }
+
+                @if (hasCreate)
+                {
+                    <a asp-controller="@controller" asp-action="Create" class="btn btn-create">
+                        Create New
+                    </a>
+                }
+            </div>
+        </div>
+
+        @if (hasPagination)
+        {
+            @* Pagination injection hook (covered in a later section) *@
+        }
+
+        <!-- Standardized Table Shell -->
+        <div class="table-card">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead class="table-header">
+                        <tr>
+                            @foreach (var header in headers!)
+                            {
+                                <th class="table-header-cell">
+                                    @if (hasPagination && orderingKeys.Contains(header))
+                                    {
+                                        @* Sortable header logic *@
+                                    }
+                                    else
+                                    {
+                                        <span class="table-header-cell-inner">@header</span>
+                                    }
+                                </th>
+                            }
+
+                            @if (hasAction != "false")
+                            {
+                                <th class="table-header-cell table-header-cell-inner">Action</th>
+                            }
+                        </tr>
+                    </thead>
+
+                    <tbody class="table-body">
+                        <!-- The child view's <tr> data rows are injected here -->
+                        @RenderBody()
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@await RenderSectionAsync("scripts", required: false)
+
+```
+
+---
+
+## 2. The Form Wrapper (`_FormWrapper.cshtml`)
+
+The `_FormWrapper` standardizes the UI for data creation and editing pages. It automatically constructs a consistent header, title, subtitle, and a "Back" button routing to the respective controller's index, leaving the child view responsible only for defining the form fields.
+
+```razor title="Views/Shared/_FormWrapper.cshtml"
+@{
+    Layout = "_AdminLayout"; // Inherit the global authenticated layout
+
+    // Extract metadata injected by the child view
+    var title = ViewData["ModuleTitle"] as string;
+    var subtitle = ViewData["ModuleSubtitle"] as string;
+    var controller = ViewData["Controller"] as string;
+}
+
+<!-- Forward nested scripts up to the parent shell -->
+@await RenderSectionAsync("scripts", required: false)
+
+<div class="page-container">
+    <div class="page-content-wrapper">
+
+        <!-- Standardized Form Header -->
+        <div class="page-header">
+            <a asp-controller="@controller" asp-action="Index" class="btn-back">
+                &larr; Back
+            </a>
+
+            <div>
+                <h1 class="page-title">@title</h1>
+                <p class="page-subtitle">@subtitle</p>
+            </div>
+        </div>
+
+        <!-- Form Body Container -->
+        <div class="form-body">
+            <!-- The child view's <form> and inputs are injected here -->
+            @RenderBody()
+        </div>
+
+    </div>
+</div>
+
+```

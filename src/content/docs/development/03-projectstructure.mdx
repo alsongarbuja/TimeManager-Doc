@@ -1,0 +1,231 @@
+---
+title: Project Structure
+description: An architectural overview of the solution monorepo and individual project layouts.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This project is configured as a monorepo containing two decoupled projects under a single main solution file:
+1.  **`TimeManager.Backend`:** The core ASP.NET Core MVC server application.
+2.  **`PunchSystem`:** The Blazor frontend web application.
+
+---
+
+## The PunchSystem Frontend
+
+The `PunchSystem` application is a streamlined Blazor web application. Its primary responsibility is rendering a single-page form that captures an employee's unique ID and dispatches an API request to the backend server to register clock-in and clock-out events.
+
+### High-Level Directory Layout
+
+```text
+├── Components/         # Razor components, pages, and layout views
+├── Services/           # Frontend infrastructure and API client logic
+├── wwwroot/            # Static assets (compiled CSS, JavaScript, media)
+├── appsettings.json    # Application configuration profiles
+└── Program.cs          # Application bootstrap and service container configuration
+```
+
+### Core Directories & Files
+
+#### 1. Components
+
+Houses all user interface elements, page definitions, and presentation layout definitions.
+
+```text
+Components/
+├── Layout/             # Shared layout wrappers
+├── Pages/
+│   ├── ...             # System pages (e.g., Error, NotFound handlers)
+│   └── Punch.razor     # The primary clock-in/out terminal view
+├── App.razor           # Main application root component
+└── Routes.razor        # Blazor router configuration
+
+```
+
+#### 2. Services
+
+This folder contains any custom services required for the working of the system.
+
+:::note
+For now I have only `KioskSessionService.cs` file which is required to get the correct department id for the clock in/out.
+:::
+
+#### 3. wwwroot
+
+The storage directory for all public-facing static assets required by the client browser.
+
+```text
+wwwroot/
+├── assets/             # Raw media assets (images, graphics, icons)
+├── js/                 # Custom client-side JavaScript utilities
+└── app.css             # Main application style definitions
+
+```
+
+#### 4. Program.cs
+
+The entry point of the application responsible for initializing the web host, configuring global environment variables, and registering dependencies within the service container.
+
+```csharp
+// Program.cs
+var builder = WebApplication.CreateBuilder(args);
+
+// Register Razor Components with support for multiple render modes
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents()
+    .AddInteractiveWebAssemblyComponents();
+
+// Resolve backend API target URL from configuration profiles
+var backendUrl = builder.Configuration["BackendUrl"]
+    ?? throw new InvalidOperationException("BackendUrl is not configured in appsettings.json");
+
+// Register a customized, scoped HttpClient pointing to the API root
+builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(backendUrl) });
+
+// Register local application services via Scoped dependency injection
+builder.Services.AddScoped<KioskSessionService>();
+
+var app = builder.Build();
+// ... configuration continues
+
+```
+
+#### 5. appsettings.json
+
+Stores runtime settings and global key-value configuration variables across deployment target environments.
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "BackendUrl": "https://localhost:7263/",
+  "AllowedHosts": "*"
+}
+```
+
+##### Program.cs
+
+The main config file where we will setup all the services, backend connection string and other settings for the project.
+
+```csharp
+// Program.cs
+
+// ...
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Adding interactive components for the form to work properly with barcode scanner
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents()
+    .AddInteractiveWebAssemblyComponents();
+
+// Getting the backend url from appsettings.json file
+var backendUrl = builder.Configuration["BackendUrl"]
+    ?? throw new InvalidOperationException("BackendUrl not configured");
+builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(backendUrl) });
+
+// Adding services as scoped enable dependency injection
+builder.Services.AddScoped<KioskSessionService>();
+
+// ...
+
+```
+
+##### appsettings.json
+
+This file contains variables for configuration during run/compile time for different environment
+
+```cssharp
+// appsettings.json
+
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "BackendUrl": "https://localhost:7263/",
+  "AllowedHosts": "*"
+}
+
+```
+
+##### wwwroot
+
+This folder holds all the static assets of the project like `JS`, `css` and `images`
+
+```
+- wwwroot
+  - assets
+    - // images, icons, videos
+  - app.css
+  - js
+    - // js files
+```
+
+Here is the continuation of your documentation page, focusing on the backend server project structure.
+
+This has been formatted to match the clean tree layout and professional style established in the first half of your document, keeping descriptions concise and clear.
+
+## The TimeManager.Backend Server
+
+The `TimeManager.Backend` project serves as the foundation of the platform. It houses the core ASP.NET Core MVC monolithic server architecture, containing both the secure RESTful Web API endpoints consumed by the `PunchSystem` frontend project, and the server-rendered Content Management System (CMS) dashboard utilized by administrators and employees.
+
+### High-Level Directory Layout
+
+```text
+TimeManager.Backend
+├── Common/            # Global constants and shared system configurations
+├── Controllers/       # HTTP request handlers coordinating application behavior
+├── Data/              # Entity Framework Core DbContext and database initialization
+├── Extensions/        # Custom C# extension methods expanding system classes
+├── Migrations/        # Automatically generated Entity Framework database migrations
+├── Models/            # Primary domain business entities mapped to database tables
+├── Properties/        # Local development profiles and IDE launch configurations
+├── Services/          # Core business logic layer running queries and data processing
+├── TagHelpers/        # Custom UI logic components rendering advanced input components
+├── Types/             # Shared system-specific custom data types and enums
+├── Utility/           # Stateless global helper structures and formatting functions
+├── ViewModels/        # Specialized layout data bindings paired with UI validations
+├── Views/             # Razor-rendered presentation pages and layouts (.cshtml)
+├── wwwroot/           # Public static visual assets (compiled styling, scripts, media)
+├── .env.example       # Template reference outlining required configurations
+└── Program.cs         # System initialization pipeline and service registration
+
+```
+
+### Key Architectural Layers
+
+#### 1. Data Access & Schema Persistence (`Data/`, `Models/`, `Migrations/`)
+
+This ecosystem isolates the database structural rules from the rest of the application context:
+
+* **`Models/`:** Houses the plain-old-CLR-objects (POCOs) that model our relational tables.
+* **`Data/`:** Contains the primary `ApplicationDbContext` instance, setting up connection configurations, relational fluent mapping configurations, and query hooks.
+* **`Migrations/`:** Holds tracking scripts automatically generated by the Entity Framework Core CLI to cleanly transition database schema changes across environments.
+
+#### 2. Business Execution (`Services/`)
+
+This decoupled layer serves as the main logic engine, fulfilling the "Thin Controller" system. Services capture workflow calculations, secure resource tracking modifications, validation handling, and data pipeline tasks completely isolated from the HTTP layer.
+
+#### 3. Request Routing & Controls (`Controllers/`)
+
+The primary traffic controllers of the backend engine. Controllers listen for execution tasks, bind incoming requests, execute initial metadata validation checks, invoke the necessary service method operations, and pass off the state data downstream.
+
+#### 4. Presentation Interface (`Views/`, `ViewModels/`, `TagHelpers/`)
+
+The server-rendered user interface layer utilizing the Razor template engine:
+
+* **`Views/`:** Concrete markup files composing layout shells, user dashboards, administrative panels, and reusable component blocks.
+* **`ViewModels/`:** Custom properties bundled with specialized security attribute configurations (`[Required]`, `[EmailAddress]`) to feed data strictly inside views without exposing primary core database tables.
+* **`TagHelpers/`:** Code-behind files compiling programmatic layout modifiers into lightweight HTML components at compile time.
+
+#### 5. Application Lifecycle Configuration (`Program.cs`, Configuration files)
+
+* **`Program.cs`:** The entry point loading operational configurations, mounting service containers via Dependency Injection, registering pipeline interceptors, and initializing web socket listeners.
+* **`.env.example` & `.env`:** Configuration boundaries designed to separate structural system keys, relational database connection lines, and secure authorization hashes safely from standard version control tracking.
