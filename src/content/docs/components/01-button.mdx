@@ -1,3 +1,122 @@
 ---
-title: Button
+title: Button Component
+description: A reusable Razor partial view for rendering standardized, state-aware buttons.
 ---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `Button` shared partial view is a reusable UI component designed to standardize button rendering across the application. It provides built-in support for dynamic state management, such as conditional loading spinners, disabled states, and vector icon injection.
+
+## Component Implementation
+
+To ensure strict type safety when rendering the component, the Razor view is bound directly to a dedicated C# View Model (`ButtonViewModel`).
+
+<Tabs>
+  <TabItem label="Views/Shared/Button.cshtml" icon="document">
+    ```razor
+    @model TimeManager.Backend.ViewModels.PartialViews.ButtonViewModel
+
+    <button type="@Model.Type"
+            id="@Model.Id"
+            class="btn w-full @Model.Classes"
+            disabled="@Model.Disabled">
+
+        @if (Model.Loading)
+        {
+            <!-- Render loading spinner SVG -->
+            <svg id="btn-spinner" class="animate-spin h-5 w-5" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+        }
+        else
+        {
+            <!-- Render icon if IconClass property is provided -->
+            @if (!string.IsNullOrEmpty(Model.IconClass))
+            {
+                <i class="@Model.IconClass"></i>
+            }
+            @Model.Text
+        }
+    </button>
+    ```
+  </TabItem>
+  <TabItem label="ViewModels/PartialViews/ButtonViewModel.cs" icon="setting">
+    ```csharp
+    namespace TimeManager.Backend.ViewModels.PartialViews
+    {
+        public class ButtonViewModel
+        {
+            public string Id { get; set; } = string.Empty;
+            public string Type { get; set; } = "button";
+            public string Classes { get; set; } = string.Empty;
+            public bool Loading { get; set; } = false;
+            public bool Disabled { get; set; } = false;
+            public string Text { get; set; } = string.Empty;
+            public string? IconClass { get; set; } = string.Empty;
+        }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Configuration Parameters
+
+When calling the partial view, you pass a new instance of `ButtonViewModel`. Below are the available properties you can configure:
+
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| **`Id`** | `string` | `""` | The unique DOM identifier for the button. |
+| **`Type`** | `string` | `"button"` | The HTML button type (e.g., `"button"`, `"submit"`, `"reset"`). |
+| **`Classes`** | `string` | `""` | Custom CSS utility classes appended to the button. |
+| **`Loading`** | `bool` | `false` | If `true`, hides the text/icon and displays a spinning SVG indicator. |
+| **`Disabled`** | `bool` | `false` | If `true`, applies the native HTML `disabled` attribute. |
+| **`Text`** | `string` | `""` | The primary text label displayed inside the button. |
+| **`IconClass`**| `string?`| `""` | Optional Remix Icon class (e.g., `"ri-save-line"`) injected before the text. |
+
+---
+
+## Example Usage
+
+Here is how the button is utilized inside the authentication portal to submit the login form. Notice how we pass the strongly-typed ViewModel directly into `@await Html.PartialAsync()`.
+
+```razor ins={27-34}
+<!-- Views/Auth/Login.cshtml -->
+@model TimeManager.Backend.ViewModels.LoginViewModel
+
+@{
+    Layout = "_MainLayout";
+    ViewData["Title"] = "Login";
+}
+
+@section scripts {
+    <script src="/js/passwordtoggle.js" defer></script>
+}
+
+<div class="login-container">
+    <div class="form-wrapper">
+        <h2 class="form-title text-center">Welcome back</h2>
+        <p class="form-subtitle text-center">Please sign in to your account</p>
+    </div>
+
+    <div class="mt-8 form-wrapper">
+        <div class="form-card">
+            <form class="space-y-6" asp-controller="Auth" asp-action="Login" method="post">
+                <div asp-validation-summary="ModelOnly" class="error-alert" role="alert"></div>
+
+                <custom-input asp-for="UserName" />
+                <custom-input asp-for="Password" />
+
+                <!-- Button Partial Injection -->
+                @await Html.PartialAsync("Button", new TimeManager.Backend.ViewModels.PartialViews.ButtonViewModel
+                {
+                    Id = "login-submit",
+                    Type = "submit",
+                    Classes = "btn-login w-100",
+                    Text = "Log in"
+                })
+            </form>
+        </div>
+    </div>
+</div>
+```

@@ -1,3 +1,121 @@
 ---
 title: Notification Toast
+description: A reusable Razor partial view for rendering temporary success and error notifications using TempData.
 ---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `NotificationToast` shared partial view provides a non-intrusive popup alert system to deliver immediate feedback after server-side actions, such as successfully saving a form or encountering a deletion error.
+
+Unlike our other custom UI components that require a strongly-typed View Model, this component is entirely stateless on the view side. Instead, it dynamically renders by reading directly from ASP.NET Core's built-in `TempData` dictionary sent from the controller.
+
+## Component Implementation
+
+This feature consists of two synchronized parts: the Razor partial view that conditionally renders the HTML based on `TempData` keys, and a lightweight JavaScript file that handles the manual dismissal and auto-hide animations.
+
+<Tabs>
+  <TabItem label="Views/Shared/NotificationToast.cshtml" icon="document">
+    ```razor
+    @if (TempData["success"] != null)
+    {
+        <div class="toast toast-success" id="toast-notification">
+            <i class="ri-checkbox-circle-line"></i>
+            <span>@TempData["success"]</span>
+            <button onclick="closeToast()"><i class="ri-close-line"></i></button>
+        </div>
+    }
+
+    @if (TempData["error"] != null)
+    {
+        <div class="toast toast-error" id="toast-notification">
+            <i class="ri-error-warning-line"></i>
+            <span>@TempData["error"]</span>
+            <button onclick="closeToast()"><i class="ri-close-line"></i></button>
+        </div>
+    }
+    ```
+  </TabItem>
+  <TabItem label="wwwroot/js/notification.js" icon="setting">
+    ```javascript
+    function closeToast() {
+        const toast = document.getElementById('toast-notification');
+        if (toast) toast.remove();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const toast = document.getElementById('toast-notification');
+        if (toast) {
+            setTimeout(() => {
+                toast.style.transition = 'opacity 0.3s ease';
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## How It Works
+
+### 1. Server-Side Triggering (`TempData`)
+To display a toast notification, you simply assign a string message to either the `"success"` or `"error"` key inside the `TempData` dictionary before returning a view or redirecting.
+
+Because `TempData` persists data for a single subsequent request, it is the perfect mechanism for displaying alerts after a POST-Redirect-GET cycle.
+
+```csharp {10, 15}
+// Controllers/DepartmentController.cs
+[HttpPost]
+public async Task<IActionResult> Delete(int id)
+{
+    var success = await _departmentService.DeleteAsync(id);
+
+    if (success)
+    {
+        // Triggers the green success toast
+        TempData["success"] = "Department deleted successfully.";
+    }
+    else
+    {
+        // Triggers the red error toast
+        TempData["error"] = "Failed to delete the department.";
+    }
+
+    return RedirectToAction("Index");
+}
+```
+
+### 2. Client-Side Lifecycle (JavaScript)
+
+Once the server renders the page and the toast HTML is injected into the DOM, the accompanying JavaScript script takes over to manage the user experience:
+
+* **Manual Dismissal:** The user can click the close button (the `ri-close-line` icon), which executes the `closeToast()` function to immediately remove the element from the document.
+* **Auto-Dismissal:** If the user does nothing, a `setTimeout` function automatically fades the toast out after 4 seconds (4000 milliseconds). It then waits exactly 300 milliseconds for the CSS opacity transition to finish smoothly before completely removing the element from the DOM.
+
+## Where it is injected
+
+As seen in the [View Layouts](../../modules/03-layout/) section, the `NotificationToast` partial view is injected directly at the bottom of the `_AdminLayout.cshtml` file. Because success and error toasts can be triggered by nearly any controller action in the CMS, placing this component inside the global authenticated layout ensures it is universally available without needing to be manually included in every single child view.
+
+```razor ins={18, 19} title="Views/Shared/_AdminLayout.cshtml"
+@{
+    Layout = "_MainLayout";
+}
+
+{/* optional sections */}
+
+<main class="layout-main">
+  {/* Layout contains */}
+</main>
+
+<!-- Unified System Overlay Portals -->
+<div class="modal-overlay">
+    <div class="modal-wrapper">
+        @await RenderSectionAsync("modalcontent", required: false)
+    </div>
+</div>
+
+<!-- Reactive Notification Infrastructure Component -->
+@await Html.PartialAsync("NotificationToast")
+```

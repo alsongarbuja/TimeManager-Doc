@@ -1,3 +1,109 @@
 ---
-title: Action Td
+title: ActionTd Component
+description: A reusable Razor partial view for rendering standardized table action cells.
 ---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `ActionTd` shared partial view is a reusable component designed specifically for data tables. It renders a standard `<td>` element that conditionally displays "Edit" and "Delete" buttons.
+
+By abstracting this into a partial view, we ensure that resource management actions remain consistent and secure across all grid views in the application.
+
+---
+
+## Component Implementation
+
+The component requires the `ActionTdViewModel` to securely route the actions to the correct controller and entity ID.
+
+<Tabs>
+  <TabItem label="Views/Shared/ActionTd.cshtml" icon="document">
+    ```razor
+    @model TimeManager.Backend.ViewModels.PartialViews.ActionTdViewModel
+
+    <td class="table-actions">
+        @if(Model.HasDelete)
+        {
+            <form method="post" asp-controller="@Model.Controller" asp-action="Delete" asp-route-id="@Model.Id" onsubmit="return confirm('Delete this resource?')">
+                @Html.AntiForgeryToken()
+                <button class="btn btn-action-delete">
+                    <i class="ri-delete-bin-7-line"></i>
+                </button>
+            </form>
+        }
+
+        @if(Model.HasEdit)
+        {
+            <a asp-controller="@Model.Controller" asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-action-edit">
+                <i class="ri-edit-line"></i>
+            </a>
+        }
+    </td>
+    ```
+  </TabItem>
+  <TabItem label="ViewModels/PartialViews/ActionTdViewModel.cs" icon="setting">
+    ```csharp
+    namespace TimeManager.Backend.ViewModels.PartialViews
+    {
+        public class ActionTdViewModel
+        {
+            public bool HasDelete { get; set; } = true;
+            public bool HasEdit { get; set; } = true;
+
+            public string Controller { get; set; } = string.Empty;
+            public int Id { get; set; }
+        }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Configuration Parameters
+
+When calling this partial view inside a table loop, you pass a new instance of `ActionTdViewModel`. Below are the available properties:
+
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| **`HasDelete`** | `bool` | `true` | If `true`, renders a secure POST form with a delete button and an anti-forgery token. |
+| **`HasEdit`** | `bool` | `true` | If `true`, renders an anchor tag routing to the resource's Edit view. |
+| **`Controller`**| `string`| `""` | The name of the ASP.NET controller handling the Delete/Edit requests. |
+| **`Id`** | `int` | `0` | The unique identifier (`asp-route-id`) of the target resource being edited or deleted. |
+
+---
+
+## Example Usage
+
+Here is how you implement the `ActionTd` component inside a standard table loop. It cleanly appends the action cell to the end of each data row.
+
+```razor ins={19-26}
+@model IEnumerable<TimeManager.Backend.ViewModels.DepartmentViewModel>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Department Name</th>
+            <th>Code</th>
+            <th class="table-actions-header">Actions</th>
+        </tr>
+    </thead>
+    <tbody class="table-body">
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@item.Code</td>
+
+                <!-- Action Cell Partial Injection -->
+                @await Html.PartialAsync("ActionTd", new TimeManager.Backend.ViewModels.PartialViews.ActionTdViewModel
+                {
+                    Controller = "Department",
+                    Id = item.Id,
+                    HasDelete = true,
+                    HasEdit = true
+                })
+            </tr>
+        }
+    </tbody>
+</table>
+```
