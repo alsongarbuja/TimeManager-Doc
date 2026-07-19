@@ -1,3 +1,159 @@
 ---
-title: Sidenav
+title: Sidenav Component
+description: A structural Razor partial view for rendering a self-contained, role-based sidebar navigation.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The `Sidenav` partial view is a structural component used exclusively within the `_AdminLayout` file. Its primary purpose is to decouple the heavy HTML markup and routing logic of the sidebar from the main layout file, improving overall codebase readability.
+
+Unlike reusable UI elements like the `Button` or `ActionTd`, the `Sidenav` is completely self-contained. It does not require a dedicated external C# View Model, a JavaScript file, or a `ViewData` dictionary passed from a controller.
+
+---
+
+## Component Implementation
+
+All necessary data structures and routing definitions are hardcoded directly within the view itself.
+
+The component utilizes a Razor `@functions` block at the bottom of the file to define `LinkGroup` and `LinkProps` classes, and initializes the `_links` array at the top. It relies on `AppConstants` and a custom `IsInAnyRole` extension method to determine which links to render for the active user session.
+
+```razor
+<!-- Views/Shared/Sidenav.cshtml -->
+@using TimeManager.Backend.Extensions
+@using TimeManager.Backend.Common
+
+@{
+    List<LinkGroup> _links = [
+        new LinkGroup {
+            Title = "General",
+            ByRole = AppConstants.AllRoles(),
+            LinkData = [
+                new LinkProps {
+                    Text = "Dashboard",
+                    Url = "dashboard",
+                    IconClass = "ri-layout-grid-line",
+                    Roles = AppConstants.EmployeeRoles(),
+                },
+                new LinkProps {
+                    Text = "Report",
+                    Url = "report",
+                    IconClass = "ri-file-chart-line",
+                    Roles = AppConstants.AdminRoles(),
+                },
+                // ... Additional links
+            ],
+        },
+        new LinkGroup {
+            Title = "Administration",
+            ByRole = [AppConstants.SUPER_ADMIN_ROLE],
+            LinkData = [
+                 new LinkProps {
+                    Text = "Department",
+                    Url = "department",
+                    IconClass = "ri-building-4-line",
+                    Roles = [AppConstants.SUPER_ADMIN_ROLE]
+                 },
+                // ... Additional links
+            ],
+        },
+        // ... Organization and Employee groups follow the exact same structure
+    ];
+}
+
+<aside class="sidebar">
+    <div>
+        <div class="sidebar-brand-container">
+            <div class="sidebar-logo">Ω</div>
+            <span class="sidebar-title">Time Clock</span>
+        </div>
+        <nav class="sidebar-nav-container">
+            <a href="#main-content" class="skip-link">Skip to main content</a>
+
+            @foreach (var grp in _links)
+            {
+                @if (User.IsInAnyRole(grp.ByRole))
+                {
+                    <div>
+                        <span class="sidebar-group-label">@grp.Title</span>
+
+                        <ul class="sidebar-nav-list">
+                        @foreach (var link in grp.LinkData)
+                        {
+                            @if (User.IsInAnyRole(link.Roles))
+                            {
+                                var targetUrl = $"/app/{link.Url}";
+                                bool IsActive = string.Equals(ViewContext.HttpContext.Request.Path.ToString().Split("/")[2].Split("?")[0], link.Url.Split("?")[0], StringComparison.OrdinalIgnoreCase);
+
+                                <li>
+                                    <a href="@targetUrl" class="sidebar-link @(IsActive ? "is-active" : "")">
+                                        <i class="@link.IconClass sidebar-link-icon"></i>
+                                        <span>@link.Text</span>
+                                    </a>
+                                </li>
+                            }
+                        }
+                        </ul>
+                    </div>
+                }
+            }
+        </nav>
+    </div>
+</aside>
+
+@functions {
+    public class LinkGroup
+    {
+        public string Title { get; set; } = string.Empty;
+        public List<LinkProps> LinkData { get; set; } = new();
+        public string[] ByRole { get; set; } = [];
+    }
+
+    public class LinkProps
+    {
+        public string Text { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+        public string IconClass { get; set; } = string.Empty;
+        public string[] Roles { get; set; } = [];
+    }
+}
+
+```
+
+---
+
+## Core Features
+
+### 1. Inline Class Definitions
+
+By utilizing the Razor `@functions` block, we avoid cluttering the global `ViewModels` directory with models (`LinkGroup`, `LinkProps`) that are strictly localized to this single file.
+
+### 2. Role-Based Access Control (RBAC)
+
+The sidebar dynamically constructs itself based on the authenticated user's permissions.
+
+* Entire navigation blocks (like "Administration") are hidden if the user does not meet the `ByRole` requirements.
+* Individual links within a visible group are further validated against the `link.Roles` array using the `User.IsInAnyRole()` extension method.
+
+
+### 3. Dynamic Active Route Detection
+
+The component automatically applies an `is-active` CSS class to the currently selected menu item. It extracts the current request path directly from the `ViewContext`, splits the URL string to find the active module, and performs a case-insensitive match against the target URL.
+
+---
+
+## Usage
+
+Because it operates entirely on its own internal data, injecting the `Sidenav` into the `_AdminLayout.cshtml` file requires no parameter configuration. It is a clean, one-line asynchronous call. And as stated early we use this only on the _AdminLayout file.
+
+```razor title="Views/Shared/_AdminLayout.cshtml" {3}
+<main class="layout-main">
+    <!-- Parameterless partial injection -->
+    @await Html.PartialAsync("Sidenav")
+
+    <div class="layout-section">
+        <!-- Main content area -->
+        @RenderBody()
+    </div>
+</main>
+
+```

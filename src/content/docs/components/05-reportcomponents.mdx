@@ -1,3 +1,201 @@
 ---
-title: Report components
+title: Report Components
+description: Specialized reusable Razor partial views designed for the Report module.
 ---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Report Components are a suite of specialized, shared partial views. Unlike global UI components (like Buttons or Inputs), these views are purpose-built for the Report module to handle the specific layout requirements of displaying timesheets, worked hours, and bi-weekly summaries.
+
+This suite includes three interconnected partial views:
+1. **`ReportStat`**: Displays top-level aggregate hour summaries.
+2. **`ReportTable`**: Renders the shell of a bi-weekly timesheet grid.
+3. **`WeekRow`**: Injects individual week data into the `ReportTable`.
+
+---
+
+## 1. ReportStat
+
+The `ReportStat` component renders a three-card grid displaying a high-level overview of an employee's time block, breaking down their total hours into actual worked hours and holiday time.
+
+<Tabs>
+  <TabItem label="Views/Shared/ReportStat.cshtml" icon="document">
+    ```razor
+    @model TimeManager.Backend.ViewModels.PartialViews.ReportStatModel
+
+    <div class="report-page-stats">
+        <div class="report-page-stat-card">
+            <span class="report-page-stat-label">Total Hours</span>
+            <span class="report-page-stat-value">@Model.TotalHours.ToString("F2")</span>
+        </div>
+        <div class="report-page-stat-card">
+            <span class="report-page-stat-label">Worked Hours</span>
+            <span class="report-page-stat-value">@Model.TotalWorkedHours.ToString("F2")</span>
+        </div>
+        <div class="report-page-stat-card">
+            <span class="report-page-stat-label">Holiday Hours</span>
+            <span class="report-page-stat-value">@Model.TotalHolidayHours.ToString("F2")</span>
+        </div>
+    </div>
+    ```
+  </TabItem>
+  <TabItem label="ViewModels/PartialViews/ReportStatModel.cs" icon="setting">
+    ```csharp
+    namespace TimeManager.Backend.ViewModels.PartialViews
+    {
+        public class ReportStatModel
+        {
+            public double TotalHours { get; set; } = 0.0;
+            public double TotalWorkedHours { get; set; } = 0.0;
+            public double TotalHolidayHours { get; set; } = 0.0;
+        }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Configuration Parameters
+
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| **`TotalHours`** | `double` | `0.0` | The absolute total of all hours recorded in the period. |
+| **`TotalWorkedHours`** | `double` | `0.0` | The total hours actively worked by the employee. |
+| **`TotalHolidayHours`**| `double` | `0.0` | The total hours credited as holiday/time off. |
+
+---
+
+## 2. ReportTable
+
+The `ReportTable` component generates the structural shell of a bi-weekly timesheet. It maps out the days of the week as table headers (applying special CSS classes to weekends) and calls the `WeekRow` partial view internally to populate the grid data.
+
+<Tabs>
+  <TabItem label="Views/Shared/ReportTable.cshtml" icon="document">
+    ```razor
+    @model TimeManager.Backend.ViewModels.PartialViews.ReportTablePartialViewModel
+
+    @{
+        var days = new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
+    }
+
+    <div class="report-page-table-card">
+        <div class="report-page-table-scroll">
+            <table class="report-page-table">
+                <thead>
+                    <tr>
+                        <th class="report-page-th report-page-th-week">Week</th>
+                        @foreach (var day in days)
+                        {
+                            <th class="report-page-th @(day is "Saturday" or "Sunday" ? "rg-th-weekend" : "")">
+                                @day
+                            </th>
+                        }
+                        <th class="report-page-th report-page-th-total">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Inject the data rows for Week 1 and Week 2 -->
+                    @await Html.PartialAsync("WeekRow", (Model.WeekOne.Week, Model.WeekOne.Label, days))
+                    @await Html.PartialAsync("WeekRow", (Model.WeekTwo.Week, Model.WeekTwo.Label, days))
+                </tbody>
+                <tfoot>
+                    <tr class="report-page-foot-row">
+                        <td colspan="@(days.Length + 1)" class="report-page-foot-spacer"></td>
+                        <td class="report-page-foot-total">@Model.TotalHours.ToString("F2")</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    ```
+  </TabItem>
+  <TabItem label="ViewModels/PartialViews/ReportTablePartialViewModel.cs" icon="setting">
+    ```csharp
+    namespace TimeManager.Backend.ViewModels.PartialViews
+    {
+        public class ReportTablePartialViewModel
+        {
+            public double TotalHours { get; set; } = 0.0;
+            public required ReportTableWeekRow WeekOne { get; set; }
+            public required ReportTableWeekRow WeekTwo { get; set; }
+        }
+
+        public class ReportTableWeekRow
+        {
+            public string Label { get; set; } = string.Empty;
+            public Dictionary<string, DayReport> Week { get; set; } = new();
+        }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Configuration Parameters
+
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| **`TotalHours`** | `double` | `0.0` | The aggregate sum of hours across both weeks. |
+| **`WeekOne`** | `ReportTableWeekRow` | - | The label and dictionary payload for the first week. |
+| **`WeekTwo`** | `ReportTableWeekRow` | - | The label and dictionary payload for the second week. |
+
+---
+
+## 3. WeekRow
+
+The `WeekRow` component is utilized directly by the `ReportTable`. It iterates over the provided 7-day array and attempts to look up a `DayReport` from the dictionary payload. If an entry exists, it prints the hours and the time type (e.g., standard, overtime); if not, it prints a clean empty state (`—`).
+
+<Tabs>
+  <TabItem label="Views/Shared/WeekRow.cshtml" icon="document">
+    ```razor
+    @using TimeManager.Backend.ViewModels
+    @* The model is a C# Tuple containing the Dictionary, Label, and Days array *@
+    @model (Dictionary<string, DayReport> Week, string Label, string[] Days)
+
+    @{
+        var weekTotal = Model.Week.Values.Sum(d => d.Hours);
+    }
+
+    <tr>
+        <td class="week-label">@Model.Label</td>
+
+        @foreach (var day in Model.Days)
+        {
+            if (Model.Week.TryGetValue(day, out var entry))
+            {
+                <td>
+                    <span class="hours-value">@entry.Hours.ToString("F2")</span>
+                    <span class="hours-type @entry.Type.ToLower()">@entry.Type</span>
+                </td>
+            }
+            else
+            {
+                <td class="no-entry">&mdash;</td>
+            }
+        }
+
+        <td class="total-cell">@weekTotal.ToString("F2")</td>
+    </tr>
+    ```
+  </TabItem>
+  <TabItem label="ViewModels/ReportViewModel.cs" icon="setting">
+    ```csharp
+    namespace TimeManager.Backend.ViewModels
+    {
+        public class DayReport
+        {
+            public double Hours { get; set; } = 0.0;
+            public string Type { get; set; } = string.Empty;
+        }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Configuration Parameters (Tuple)
+
+Instead of a dedicated class, the `WeekRow` view model utilizes a highly efficient **C# Tuple** passed down from the parent `ReportTable`.
+
+| Tuple Item | Type | Description |
+| :--- | :--- | :--- |
+| **`Week`** | `Dictionary<string, DayReport>` | A dictionary mapping the day of the week (e.g., `"Monday"`) to its corresponding hour entry. |
+| **`Label`** | `string` | The header label for the row (e.g., `"Week 1"`). |
+| **`Days`** | `string[]` | The array of the 7 days of the week passed from the parent table to ensure ordered iteration. |

@@ -1,0 +1,62 @@
+---
+title: Components Overview
+description: A high-level index of the custom shared partial views and UI components available in the TimeManager application.
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Welcome to the **Components Directory**. This section documents the custom, reusable UI elements built using ASP.NET Core Razor Shared Partial Views built **in this project**.
+
+By abstracting complex markup into shared components, we ensure our primary Razor pages remain thin, our styling remains consistent, and centralized logic (such as Role-Based Access Control and dynamic state rendering) is easily maintainable.
+
+---
+
+## Global UI Components
+
+These components are highly generic, strictly typed via View Models, and can be utilized across any data management module within the application.
+
+<CardGrid>
+  <LinkCard
+    title="Button Component"
+    href="../01-button"
+    description="A reusable button element with built-in support for dynamic states, vector icons, and asynchronous loading spinners."
+  />
+  <LinkCard
+    title="ActionTd Component"
+    href="../02-actiontd"
+    description="A standardized table cell component that securely renders conditional Edit and Delete actions inside data grids."
+  />
+  <LinkCard
+    title="Notification Toast"
+    href="../04-notificationtoast"
+    description="A stateless popup alert system driven by ASP.NET TempData for delivering immediate success or error feedback."
+  />
+</CardGrid>
+
+---
+
+## Structural Components
+
+These components are responsible for the architectural layout of the application shell and operate independently of specific data entry forms.
+
+<CardGrid>
+  <LinkCard
+    title="Sidenav Component"
+    href="../03-sidenav/"
+    description="A self-contained structural sidebar providing dynamic, role-based navigation for the authenticated admin layout."
+  />
+</CardGrid>
+
+---
+
+## Module-Specific Components
+
+These components are tailored for highly specific business logic domains and are designed to be utilized in conjunction with one another.
+
+<CardGrid>
+  <LinkCard
+    title="Report Components"
+    href="../05-reportcomponents/"
+    description="A specialized suite of views (ReportStat, ReportTable, WeekRow) engineered specifically to construct complex bi-weekly timesheets and hour summaries."
+  />
+</CardGrid>
