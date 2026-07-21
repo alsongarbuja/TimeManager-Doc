@@ -1,0 +1,47 @@
+---
+title: Production Deployment
+description: Guide for compiling and deploying the ASP.NET Core application to an IIS production server.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+To deploy the project to a production environment, you must first compile the application into an optimized release build using the .NET CLI. Once the executable binaries are generated, they can be securely hosted on a production web server such as Internet Information Services (IIS).
+
+---
+
+## 1. Compiling the Application
+
+You can publish the application in two different ways depending on whether your target server already has the .NET runtime installed.
+
+<Tabs>
+  <TabItem label="Framework-Dependent Build" icon="document">
+    Use this standard command if the target server already has the appropriate .NET hosting bundle installed. This generates a lightweight build that relies on the system's existing framework.
+
+    ```bash
+    dotnet publish -c Release
+    ```
+  </TabItem>
+  <TabItem label="Self-Contained Build" icon="setting">
+    If you are deploying to a server (Windows or non-Windows) that does not have the .NET runtime installed, you can generate a self-contained executable.
+
+    <Aside type="caution">
+      This build will be significantly larger in file size because it packages the entire .NET runtime alongside your application binaries.
+    </Aside>
+
+    ```bash
+    dotnet publish -c Release -r win-x64 --self-contained true
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 2. Deploying to IIS
+
+Once the `publish` command has successfully generated the release files (typically located in the `bin/Release/{TARGET_FRAMEWORK}/publish/` directory), you can transfer these files to your production server environment.
+
+To configure the application pool and site on an IIS server, follow the standard Microsoft hosting procedures.
+
+<Aside type="tip">
+  For comprehensive, step-by-step server configuration instructions, please refer to the official [ASP.NET Publish To IIS](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/) documentation.
+</Aside>
