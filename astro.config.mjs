@@ -42,6 +42,14 @@ export default defineConfig({
           label: "Production",
           items: [{ autogenerate: { directory: "production" } }],
         },
+        {
+          label: "Documentation",
+          items: [{ autogenerate: { directory: "documentation" } }],
+        },
+        {
+          label: "Extra Projects",
+          items: [{ autogenerate: { directory: "extra" } }],
+        },
       ],
     }),
     mermaid(),
