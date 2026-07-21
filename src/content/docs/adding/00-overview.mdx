@@ -1,0 +1,34 @@
+---
+title: Adding Overview
+description: A high-level index of guides for extending the TimeManager application.
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Having explored how the project is structured conceptually via the core [MVC Modules](../../modules/01-mvc/) and the centralized [UI Components](../../components/00-overview/), this section focuses on actionable development workflows.
+
+Here, you will find standardized, step-by-step guides for extending the application's capabilities—from scaffolding entirely new database entities to implementing complex data grid behaviors and more.
+
+---
+
+## Developer Workflows
+
+The following guides detail the standard operating procedures for adding new features.
+
+<CardGrid>
+  <LinkCard
+    title="Creating a New Module"
+    href="../01-module/"
+    description="A step-by-step pipeline for scaffolding a new feature module, from defining the EFC data model to rendering the Razor views."
+  />
+  <LinkCard
+    title="Adding Pagination"
+    href="../02-pagination/"
+    description="A guide to implementing the project's extensible pagination feature securely across any data grid or entity list."
+  />
+  <LinkCard
+    title="Adding Filter"
+    href="../03-filter/"
+    description="Instruction guide to implementing the extensible filtering feature across data grid or entity list"
+  />
+</CardGrid>

@@ -1,0 +1,586 @@
+---
+title: Creating a New Module
+description: A step-by-step pipeline for scaffolding a new feature module in the TimeManager architecture.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Creating a new module (or integrating a new model) into the project follows a straightforward, standardized pipeline. By adhering to this structure, you ensure a clean separation of concerns across the database layer, business logic, and presentation layer.
+
+## Quick Steps
+
+<Steps>
+
+1.  **Create the Data Model**
+
+    Create a new data model class inside the `Models/` folder. This acts as the Plain Old CLR Object (POCO) that Entity Framework Core (EFC) will use to map your database schema.
+
+2.  **Register the Model in the DbContext**
+
+    Register the newly created model as a `DbSet` inside the `ApplicationDbContext` (located at `Data/HrmsDbContext.cs`) so EFC knows to track it.
+
+    ```csharp ins={11} title="Data/HrmsDbContext.cs"
+    namespace TimeManager.Backend.Data
+    {
+        public class HrmsDbContext : IdentityDbContext<User, Role, int>
+        {
+            public HrmsDbContext(DbContextOptions<HrmsDbContext> options) : base(options)
+            {
+            }
+
+            // ... other registered models
+
+            public DbSet<NewModel> NewModels { get; set; }
+
+            // ... overrides
+        }
+    }
+    ```
+
+3.  **Create the Service Layer**
+
+    Inside the `Services/` folder, create a service interface (e.g., `INewModelService`) and its concrete implementation class. This is where all your core business logic and database queries should live.
+
+4.  **Register the Service for Dependency Injection**
+
+    Register the service interface and implementation class in the `Program.cs` file. We typically register these as `Scoped` so a new instance is created per HTTP request.
+
+    ```csharp ins={7} title="Program.cs"
+    var builder = WebApplication.CreateBuilder(args);
+
+    builder.Services.AddOpenApi();
+
+    // ... configs
+
+    builder.Services.AddScoped<INewModelService, NewModelService>();
+
+    // ... configurations continue
+    ```
+
+5.  **Create the MVC Controller**
+
+    Inside the `Controllers/` folder, create a controller that injects your new service. Define the standard HTTP endpoints (GET, POST) to handle routing and form submissions.
+
+    ```csharp
+    using Microsoft.AspNetCore.Mvc;
+    using TimeManager.Backend.Services;
+    using TimeManager.Backend.ViewModels;
+
+    namespace TimeManager.Backend.Controllers
+    {
+        public class NewController(INewModelService newService) : Controller
+        {
+            [HttpGet]
+            public async Task<IActionResult> Index()
+            {
+                // ... fetch operations via newService
+                return View();
+            }
+
+            [HttpPost]
+            [ValidateAntiForgeryToken] // Required for secure form POST requests
+            public async Task<IActionResult> Create(NewViewModel model)
+            {
+                if (!ModelState.IsValid)
+                {
+                    return View(model);
+                }
+
+                // ... create operations via newService
+
+                return RedirectToAction(nameof(Index));
+            }
+        }
+    }
+    ```
+
+6.  **Define a View Model**
+
+    Now that the server-side code is complete, move to the presentation layer. Inside the `ViewModels/` folder, create a View Model. While not strictly required for every single module, it is **highly recommended**. It abstracts the raw database schema and allows you to pass only the exact data required to the Razor views.
+
+7.  **Generate the Razor Views**
+
+    Finally, create a dedicated folder for your controller inside the `Views/` directory (e.g., `Views/New/`) and create the corresponding `.cshtml` Razor files (like `Index.cshtml` and `Create.cshtml`) to render your user interface.
+
+</Steps>
+
+## Example
+
+Here is a full example of creating a new module.
+
+:::note
+We will be using a already existing module (PunchEntry) for the full example.
+:::
+
+**Data Model**
+```csharp title="Models/Punch_Management/PunchEntry.cs"
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using TimeManager.Backend.Models.Employee_Management;
+
+namespace TimeManager.Backend.Models.Punch_Management
+{
+  public class PunchEntry
+  {
+    [Key]
+    public int Id { get; set; }
+
+    public required DateTime ClockIn { get; set; }
+
+    public DateTime? ClockOut { get; set; }
+
+    public required int JobProfileId { get; set; }
+
+    [ForeignKey("JobProfileId")]
+    public virtual JobProfile JobProfile { get; set; } = null!;
+  }
+}
+```
+
+**Registrating Data Model**
+```csharp ins={11} title="Data/HrmsDbContext.cs"
+namespace TimeManager.Backend.Data
+    {
+        public class HrmsDbContext : IdentityDbContext<User, Role, int>
+        {
+            public HrmsDbContext(DbContextOptions<HrmsDbContext> options) : base(options)
+            {
+            }
+
+            // ... other registered models
+
+            public DbSet<PunchEntry> PunchEntry { get; set; }
+
+            // ... overrides
+        }
+    }
+```
+
+**Services**
+```csharp title="Services/PunchServices.cs"
+using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
+using TimeManager.Backend.Controllers.PunchManagement.Dto;
+using TimeManager.Backend.Data;
+using TimeManager.Backend.Extensions;
+using TimeManager.Backend.Models.Punch_Management;
+using TimeManager.Backend.Models.Requests;
+using TimeManager.Backend.Models.Responses;
+using TimeManager.Backend.Utility;
+using TimeManager.Backend.ViewModels;
+
+namespace TimeManager.Backend.Services
+{
+    public interface IPunchServices
+    {
+        Task<PagedResponse<PunchViewModel>> GetPunchesAsync(
+            int? departmentId,
+            PaginationQuery pagFilter,
+            FilterCondition filter,
+            PaginationQuery defaultQuery
+            );
+        Task CreatePunchAsync(PunchViewModel pvm);
+        Task<PunchEntry?> GetPunchByIdAsync(int id);
+        Task<PunchEntry?> UpdatePunchAsync(int id, PunchDto punchEntryDto);
+        Task<int?> DeletePunchByIdAsync(int id);
+
+        Task<PunchStatusModel> GetCurrentUserPunchStauts(int profileId);
+    }
+
+    public class PunchServices(HrmsDbContext context, ILogger<PunchEntry> logger) : IPunchServices
+    {
+        public async Task CreatePunchAsync(PunchViewModel pvm)
+        {
+            context.PunchEntry.Add(new PunchEntry {
+                JobProfileId = pvm.EmployeeId,
+                ClockIn = pvm.ClockInTime.ToUniversalTime(),
+                ClockOut = pvm.ClockOutTime?.ToUniversalTime(),
+            });
+            await context.SaveChangesAsync();
+        }
+
+        public async Task<int?> DeletePunchByIdAsync(int id)
+        {
+            var punch = await context.PunchEntry.FindOrThrowAsync(id);
+            context.PunchEntry.Remove(punch);
+            await context.SaveChangesAsync();
+            return id;
+        }
+
+        public async Task<PunchStatusModel> GetCurrentUserPunchStauts(int profileId)
+        {
+            DateTime todaysDate = DateTime.UtcNow.Date;
+            var punchesToday = await context.PunchEntry.Where(pe => pe.JobProfileId == profileId && pe.ClockIn > todaysDate).OrderByDescending(pe => pe.ClockIn).ToListAsync();
+
+            if (punchesToday.Count == 0)
+            {
+                logger.LogInformation($"No punche entry with job profile id {profileId} found for today");
+                logger.LogInformation("Getting the last punch entry for clock out stamp");
+                var lastPunch = await context.PunchEntry.Where(pe => pe.JobProfileId == profileId).OrderByDescending(pe => pe.ClockIn).FirstOrDefaultAsync();
+
+                return new PunchStatusModel
+                {
+                    IsActive = false,
+                    LastTimeStamp = lastPunch?.ClockOut?.ToLocalTime()
+                };
+            }
+
+            bool isCurrentlyActive = true;
+            DateTime clockInTimeStamp = punchesToday[^1].ClockIn.ToLocalTime();
+            DateTime? clockOutTimeStamp = null;
+
+            if (punchesToday[0].ClockOut == null)
+            {
+                logger.LogInformation("Last punch has null clock out, employee is active");
+                if (punchesToday.Count > 1)
+                {
+                    logger.LogInformation("More than one punch entry found using that clock out time from entry one before the last punch");
+                    clockOutTimeStamp = punchesToday[1].ClockOut?.ToLocalTime();
+                }
+            } else
+            {
+                logger.LogInformation("Last punch has clock out time, employee is inactive");
+                isCurrentlyActive = false;
+                clockOutTimeStamp = punchesToday[0].ClockOut?.ToLocalTime();
+            }
+
+            return new PunchStatusModel
+            {
+                IsActive = isCurrentlyActive,
+                TimeStamp = clockInTimeStamp,
+                LastTimeStamp = clockOutTimeStamp,
+            };
+        }
+
+        public async Task<PunchEntry?> GetPunchByIdAsync(int id)
+        {
+             return await context.PunchEntry.Include(p => p.JobProfile).ThenInclude(jp => jp.Employee).Where(p => p.Id == id).FirstOrDefaultAsync();
+        }
+
+        public async Task<PagedResponse<PunchViewModel>> GetPunchesAsync(
+            int? departmentId,
+            PaginationQuery pagFilter,
+            FilterCondition filter,
+            PaginationQuery defaultQuery
+            )
+        {
+            (int pageNumber, int pageSize, string? orderBy, bool isOrderDescending) = PaginationValidation.ConvertToValidPaginationQueries(pagFilter, defaultQuery);
+
+            Console.WriteLine($"Page size: {pageSize}, OrderBy: {orderBy}, isOrderDescending: {isOrderDescending}");
+
+            Expression<Func<PunchEntry, object>>? orderExpression = orderBy?.ToLower() switch
+            {
+                "name" => pe => pe.JobProfile.Employee.FirstName,
+                "clock in" => pe => pe.ClockIn,
+                "clock out" => pe => pe.ClockOut,
+                _ => pe => pe.ClockIn,
+            };
+
+            var builder = new ExpressionBuilder<PunchEntry>();
+            var whereExpression = filter.Value == "-404" ? null : builder.BuildPredicate(filter);
+
+            (var punches, int totalRecords) = await context.PunchEntry.FindWithPaginationAsync(
+                pe => new PunchViewModel
+                {
+                    Id = pe.Id,
+                    ClockInTime = pe.ClockIn,
+                    ClockOutTime = pe.ClockOut,
+                    EmployeeId = pe.JobProfile.Id,
+                    Name = $"{pe.JobProfile.Employee.FirstName} {pe.JobProfile.Employee.LastName}"
+                },
+                ((pageNumber - 1) * pageSize),
+                pageSize,
+                whereExpression,
+                orderExpression,
+                isOrderDescending
+                );
+
+            return new PagedResponse<PunchViewModel>(punches, pageNumber, pageSize, totalRecords, orderBy, isOrderDescending);
+        }
+
+        public async Task<PunchEntry?> UpdatePunchAsync(int id, PunchDto punchEntryDto)
+        {
+            var p = await context.PunchEntry.FindOrThrowAsync(id);
+            context.Entry(p).CurrentValues.SetValues(new {
+                ClockIn = punchEntryDto.ClockIn.ToUniversalTime(),
+                ClockOut = punchEntryDto.ClockOut != null ? punchEntryDto.ClockOut?.ToUniversalTime() : null,
+            });
+            await context.SaveChangesAsync();
+
+            return p;
+        }
+    }
+}
+```
+
+**Registering service**
+```csharp ins={7} title="Program.cs"
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi();
+
+// ... configs
+
+builder.Services.AddScoped<INewModelService, NewModelService>();
+
+// ... configurations continue
+```
+
+**Controller**
+```csharp title="Controllers/Punch/PunchController.cs"
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using System.Security.Claims;
+using TimeManager.Backend.Controllers.PunchManagement.Dto;
+using TimeManager.Backend.Extensions;
+using TimeManager.Backend.Models;
+using TimeManager.Backend.Models.Requests;
+using TimeManager.Backend.Models.Responses;
+using TimeManager.Backend.Services;
+using TimeManager.Backend.Utility;
+using TimeManager.Backend.ViewModels;
+
+namespace TimeManager.Backend.Controllers.Punch
+{
+    [Authorize(Policy = "AdminPolicy")]
+    public class PunchController(
+        IPunchServices punchServices,
+        IJobProfileService jobProfileService,
+        ICacheService cacheService
+        ) : Controller
+    {
+        public async Task<IActionResult> Index([FromQuery] PaginationQuery pagFilter, [FromQuery] FilterCondition filter)
+        {
+            var uClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (!int.TryParse(uClaim, out int userId))
+            {
+                return Unauthorized();
+            }
+
+            Preferences prefs = await cacheService.GetPreferencesAsync(userId);
+
+            int? departmentId = HttpContext.Session.GetDepartmentId();
+            PagedResponse<PunchViewModel> data = await punchServices.GetPunchesAsync(departmentId, pagFilter, filter, new PaginationQuery
+            {
+                PageSize = prefs.PunchesPref.Limit,
+                OrderBy = prefs.PunchesPref.OrderBy,
+                IsOrderDescending = prefs.PunchesPref.IsOrderDescending
+            });
+            IEnumerable<SelectListItem> employees = await jobProfileService.GetUserOptionsAsync(departmentId);
+            return View(new PunchViewOverall
+            {
+                Employees = employees,
+                Data = data,
+            });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Create()
+        {
+            int? departmentId = HttpContext.Session.GetDepartmentId();
+            IEnumerable<SelectListItem> employees = await jobProfileService.GetUserOptionsAsync(departmentId);
+            return View(new PunchViewModel
+            {
+                ClockInTime = DateTime.Now,
+                Employees = employees,
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create(PunchViewModel pvm)
+        {
+            await punchServices.CreatePunchAsync(pvm);
+            int? departmentId = HttpContext.Session.GetDepartmentId();
+            IEnumerable<SelectListItem> employees = await jobProfileService.GetUserOptionsAsync(departmentId);
+            return View(new PunchViewModel
+            {
+                ClockInTime = DateTime.Now,
+                Employees = employees,
+            });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Edit(int id)
+        {
+            var punch = await punchServices.GetPunchByIdAsync(id);
+            if (punch == null) return NotFound();
+            return View(new PunchViewModel
+            {
+                Id = punch.Id,
+                ClockInTime = punch.ClockIn,
+                ClockOutTime = punch.ClockOut,
+                EmployeeId = punch.JobProfileId,
+                Name = $"{punch.JobProfile.Employee.FirstName} {punch.JobProfile.Employee.LastName}"
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, PunchViewModel pvm)
+        {
+            if (!ModelState.IsValid) return View(pvm);
+            var d = await punchServices.UpdatePunchAsync(id, new PunchDto
+            {
+                ClockIn = pvm.ClockInTime,
+                ClockOut = pvm.ClockOutTime,
+            });
+
+            if (d == null)
+            {
+                TempData["error"] = "Error while updating the data";
+                return View(pvm);
+            }
+
+            TempData["success"] = "Successfully edited the data";
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(int id)
+        {
+            await punchServices.DeletePunchByIdAsync(id);
+            return RedirectToAction(nameof(Index));
+        }
+    }
+}
+```
+
+**View Model**
+```csharp title="ViewModels/PunchViewModel.cs"
+using Microsoft.AspNetCore.Mvc.Rendering;
+using System.ComponentModel.DataAnnotations;
+using TimeManager.Backend.Models.Responses;
+
+namespace TimeManager.Backend.ViewModels
+{
+    public class PunchViewOverall
+    {
+        public IEnumerable<SelectListItem> Employees { get; set; } = [];
+
+        public PagedResponse<PunchViewModel> Data { get; set; }
+    }
+
+    public class PunchViewModel
+    {
+        public int Id { get; set; }
+
+        public int EmployeeId { get; set; }
+        public string Name { get; set; } = string.Empty;
+
+        [Display(Name = "Clock in")]
+        public DateTime ClockInTime { get; set; }
+
+        [Display(Name = "Clock out")]
+        public DateTime? ClockOutTime { get; set; }
+
+        public IEnumerable<SelectListItem> Employees { get; set; } = [];
+    }
+
+    public class PunchStatusModel
+    {
+        public bool IsActive { get; set; }
+
+        public DateTime? TimeStamp { get; set; }
+
+        public DateTime? LastTimeStamp { get; set; }
+    }
+}
+```
+
+**View**
+```razor title="Views/Punch/index.cshtml"
+@using TimeManager.Backend.ViewModels.PartialViews
+@using TimeManager.Backend.ViewModels
+@model PunchViewOverall
+
+@{
+    Layout = "_ListWrapper";
+    ViewData["Title"] = "Punch entries";
+
+    List<string> Headers = ["Name", "Clock In", "Clock Out"];
+    List<string> OrderingKeys = ["Name", "Clock In", "Clock Out"];
+    ViewData["Headers"] = Headers;
+    ViewData["ModuleTitle"] = "Punches";
+    ViewData["ModuleDesc"] = "Manage the punches in the system";
+    ViewData["Controller"] = "Punch";
+
+    ViewData["HasPagination"] = true;
+    ViewData["OrderingKeys"] = OrderingKeys;
+    ViewData["TotalPages"] = Model.Data.TotalPages;
+    ViewData["TotalRecords"] = Model.Data.TotalRecords;
+
+    IEnumerable<PunchViewModel> punches = Model.Data.Data;
+
+    string val = Context.Request.Query["value"];
+
+    ViewData["OrderBy"] = Model.Data.OrderBy;
+    ViewData["PageSize"] = Model.Data.PageSize;
+    ViewData["IsOrderDescending"] = Model.Data.IsOrderDescending;
+}
+
+@section CustomCreate {
+    <form asp-controller="Punch"
+          asp-action="Index"
+          method="get">
+        <input hidden name="pageNumber" value="1" />
+        <input hidden name="pageSize" value="25" />
+        <input hidden name="orderBy" value="ClockIn" />
+        <input hidden name="isOrderDescending" value="True" />
+        <input hidden name="propertyName" value="JobProfileId" />
+        <input hidden name="operator" value="Equals" />
+
+        <div class='form-group'>
+            <label for='emp-select' class='form-label fw-semibold'>
+                Filter by employee
+            </label>
+            <select id='emp-select'
+                    name='value'
+                    class='form-input'
+                    onchange="this.form.submit()">
+                <option value="-404">All</option>
+                @foreach (var e in Model.Employees)
+                {
+                    <option value="@e.Value"
+                            selected="@(val == e.Value.ToString())">@e.Text</option>
+                }
+            </select>
+        </div>
+    </form>
+}
+
+@if (punches.Count() <= 0)
+{
+    <tr>
+        <td colspan="@Headers.Count"
+            class="table-empty-cell">
+            No data available
+        </td>
+    </tr>
+}
+else
+{
+    foreach (var d in punches)
+    {
+        <tr class="table-row" data-employee-id="@d.EmployeeId">
+            <td class="table-cell">@d.Name</td>
+            <td class="table-cell">@DateTime.Parse(d.ClockInTime.ToString()).ToLocalTime().ToString("hh:mm tt, MMM dd yyyy")</td>
+            @if(d.ClockOutTime is not null)
+            {
+                <td class="table-cell">@DateTime.Parse(d.ClockOutTime.ToString()!).ToLocalTime().ToString("hh:mm tt, MMM dd yyyy")</td>
+            } else
+            {
+                <td class="table-cell">-</td>
+            }
+            @await Html.PartialAsync("ActionTd", new ActionTdViewModel
+            {
+                Controller = "Punch",
+                Id = d.Id,
+            })
+        </tr>
+    }
+}
+```

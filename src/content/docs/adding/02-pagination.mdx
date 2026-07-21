@@ -1,0 +1,165 @@
+---
+title: Adding Pagination
+description: A step-by-step guide to implementing the modular pagination feature across any entity list.
+---
+
+import { Steps } from "@astrojs/starlight/components"
+
+Pagination is architected as an extensible, modular feature within the project. Implementing it across any data module requires a consistent flow: routing the query, sanitizing the input, applying the database extension, and mapping the structured response to the UI wrapper.
+
+## Implementation Steps
+
+<Steps>
+
+1.  **Inject the Pagination Query via the Controller**
+
+    First, capture the incoming pagination parameters from the HTTP request query string and pass them down to the service layer.
+
+    ```csharp del={1, 7} ins={2, 8} title="Controllers/Punch/PunchController.cs"
+    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index([FromQuery] PaginationQuery pagFilter)
+    {
+        // ...
+
+        PagedResponse<PunchViewModel> data =
+            await punchServices.GetPunchesAsync(departmentId);
+            await punchServices.GetPunchesAsync(departmentId, pagFilter);
+
+        // ...
+
+        return View();
+    }
+    ```
+
+    By capturing `[FromQuery] PaginationQuery pagFilter`, we ensure the data request is strongly typed. Notice that the service now returns a structured `PagedResponse` rather than a flat `IEnumerable`.
+
+2.  **Sanitize the Pagination Object**
+
+    Before executing database queries, you must sanitize the input values. Malicious or malformed requests might attempt to pass invalid parameters (e.g., negative page numbers or excessive page sizes). We handle this securely using the [`PaginationValidation`](../../modules/08-utilities#the-paginationvalidation-class) utility.
+
+    ```csharp del={1, 9-18, 32} ins={2, 4-5, 19-30, 33} title="Services/PunchServices.cs"
+    public async Task<IEnumerable<PunchViewModel>> GetPunchesAsync(int? departmentId)
+    public async Task<PagedResponse<PunchViewModel>> GetPunchesAsync(int? departmentId, PaginationQuery pagFilter)
+    {
+        (int pageNumber, int pageSize, string? orderBy, bool isOrderDescending) =
+            PaginationValidation.ConvertToValidPaginationQueries(pagFilter);
+
+        // ...
+
+        var punches = await context.PunchEntry.Select(
+            pe => new PunchViewModel
+            {
+                Id = pe.Id,
+                ClockInTime = pe.ClockIn,
+                ClockOutTime = pe.ClockOut,
+                EmployeeId = pe.JobProfile.Id,
+                Name = $"{pe.JobProfile.Employee.FirstName} {pe.JobProfile.Employee.LastName}"
+            }
+        ).ToListAsync();
+        (var punches, int totalRecords) = await context.PunchEntry.FindWithPaginationAsync(
+            pe => new PunchViewModel
+            {
+                Id = pe.Id,
+                ClockInTime = pe.ClockIn,
+                ClockOutTime = pe.ClockOut,
+                EmployeeId = pe.JobProfile.Id,
+                Name = $"{pe.JobProfile.Employee.FirstName} {pe.JobProfile.Employee.LastName}"
+            },
+            ((pageNumber - 1) * pageSize),
+            pageSize
+        );
+
+        return punches;
+        return new PagedResponse<PunchViewModel>(punches, pageNumber, pageSize, totalRecords, orderBy, isOrderDescending);
+    }
+    ```
+
+    This implementation leverages the custom [`FindWithPaginationAsync`](../../modules/06-extensions#) extension method, which cleanly separates the selection mapping from the SQL limit/offset generation, returning both the queried list and the absolute total record count.
+
+3.  **Consume the Paginated Data in Razor Views**
+
+    Finally, map the structured server response to the presentation layer. To maintain strict type safety, update the primary ViewModel (`PunchViewOverall`) to wrap the incoming `PagedResponse`.
+
+    ```csharp del={10} ins={11} title="ViewModels/PunchViewModel.cs"
+    using Microsoft.AspNetCore.Mvc.Rendering;
+    using System.ComponentModel.DataAnnotations;
+    using TimeManager.Backend.Models.Responses;
+
+    namespace TimeManager.Backend.ViewModels
+    {
+        public class PunchViewOverall
+        {
+            public IEnumerable<SelectListItem> Employees { get; set; } = [];
+            public PunchViewModel Data { get; set; }
+            public PagedResponse<PunchViewModel> Data { get; set; }
+        }
+
+        public class PunchViewModel
+        {
+            // ... same as before
+        }
+    }
+    ```
+
+    :::tip
+    You don't have to change the `ViewModel` and instead Wrap the imported viewmodel at top of the view with `PagedResponse` _(e.g. @model PagedResponse&lt;RoleViewModel&gt;)_, in the example we are using has two lists being sent back from server hence we are directly updating the viewmodel.
+    :::
+
+    With the strongly-typed model in place, pass the pagination metadata into the [`_ListWrapper`](../../modules/04-wrapper#1-the-list-wrapper-_listwrappercshtml) layout using the `ViewData` dictionary.
+
+    ```razor del={3, 34, 41} ins={4, 18-24, 26, 35, 42} title="Views/Punch/Index.cshtml"
+    @using TimeManager.Backend.ViewModels.PartialViews
+    @using TimeManager.Backend.ViewModels
+    @model IEnumerable<PunchViewModel>
+    @model PunchViewOverall
+
+    @{
+        Layout = "_ListWrapper";
+        ViewData["Title"] = "Punch entries";
+
+        List<string> Headers = ["Name", "Clock In", "Clock Out"];
+        List<string> OrderingKeys = ["Name", "Clock In", "Clock Out"];
+        ViewData["Headers"] = Headers;
+        ViewData["ModuleTitle"] = "Punches";
+        ViewData["ModuleDesc"] = "Manage the punches in the system";
+        ViewData["Controller"] = "Punch";
+
+        // Pagination configuration for the list wrapper
+        ViewData["HasPagination"] = true;
+        ViewData["OrderingKeys"] = OrderingKeys;
+        ViewData["TotalPages"] = Model.Data.TotalPages;
+        ViewData["TotalRecords"] = Model.Data.TotalRecords;
+        ViewData["OrderBy"] = Model.Data.OrderBy;
+        ViewData["PageSize"] = Model.Data.PageSize;
+        ViewData["IsOrderDescending"] = Model.Data.IsOrderDescending;
+
+        IEnumerable<PunchViewModel> punches = Model.Data.Data;
+        string val = Context.Request.Query["value"];
+    }
+
+    @section CustomCreate {
+        @* Same as before *@
+    }
+
+    @if (Model.Count() <= 0)
+    @if (!punches.Any())
+    {
+        @* Same as before *@
+    }
+    else
+    {
+        foreach (var d in Model)
+        foreach (var d in punches)
+        {
+            @* Same as before *@
+        }
+    }
+    ```
+
+    Instead of iterating directly over the root model, we isolate the specific data collection into the `punches` variable. This allows the modular `_ListWrapper` to automatically handle the heavy lifting of rendering the pagination controls.
+
+    :::tip
+    You can see the implementation of the pagination controls in _ListWrapper in the [code](https://github.com/alsongarbuja/TimeManager/blob/main/TimeManager.Backend/Views/Shared/_ListWrapper.cshtml)
+    :::
+
+</Steps>

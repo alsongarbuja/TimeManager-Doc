@@ -39,6 +39,10 @@ export default defineConfig({
           items: [{ autogenerate: { directory: "components" } }],
         },
         {
+          label: "Adding New Features",
+          items: [{ autogenerate: { directory: "adding" } }],
+        },
+        {
           label: "Production",
           items: [{ autogenerate: { directory: "production" } }],
         },
