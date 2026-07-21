@@ -11,7 +11,15 @@ Our dashboard application is built using ASP.NET Core's **Model-View-Controller 
 
 Understanding how data travels through the system is critical. The diagram below represents the unidirectional data flow cycle triggered by a browser request:
 
-{/* <Image src="image_agent_tag_11938479896831386601" alt="Diagram showing the flow of MVC architecture: User interaction goes to Controller, Controller updates Model, Model updates View, and View is presented to User" caption="Model-View-Controller Interactive Architecture Flow" /> */}
+```mermaid
+graph TB
+  Request --> |1, Http Activity| Controller
+  Controller --> |2, Cordinates activity| Services
+  Services --> |3, Uses Model| Database
+  Database --> |4, Returns the queried data| Services
+  Services --> |5, Returns data| Controller
+  Controller --> |6, Sends response| View
+```
 
 In our full-stack dashboard, the flow maps out step-by-step:
 

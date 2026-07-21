@@ -13,7 +13,7 @@ By using the `<sn-cell>` tag, you eliminate the need to manually declare and inc
 
 ## Component Implementation
 
-This tag helper extends the standard ASP.NET Core `TagHelper` class and targets the custom `<sn-cell>` HTML element[cite: 9].
+This tag helper extends the standard ASP.NET Core `TagHelper` class and targets the custom `<sn-cell>` HTML element.
 
 <Tabs>
   <TabItem label="TagHelpers/SerialNumberTagHelper.cs" icon="document">
@@ -73,8 +73,8 @@ The following attributes can be applied to the `<sn-cell>` tag to control the co
 
 | Attribute | C# Property Binding | Default | Description |
 | :--- | :--- | :--- | :--- |
-| **`counter-name`** | `CounterName` | `"default"` | Allows multiple independent counters to exist on the same page by utilizing unique string identifiers[cite: 9]. |
-| **`start`** | `Start` | `0` | The baseline numerical offset for the counter[cite: 9]. (e.g., If set to `10`, the first generated cell will be `11`[cite: 9]). |
+| **`counter-name`** | `CounterName` | `"default"` | Allows multiple independent counters to exist on the same page by utilizing unique string identifiers. |
+| **`start`** | `Start` | `0` | The baseline numerical offset for the counter. (e.g., If set to `10`, the first generated cell will be `11`). |
 
 ---
 
@@ -82,9 +82,9 @@ The following attributes can be applied to the `<sn-cell>` tag to control the co
 
 This tag helper leverages the ASP.NET Core request pipeline to manage state efficiently:
 
-*   **Request-Scoped State Tracking:** Instead of using static variables (which would cause massive race conditions across different users), the helper stores the current counter value safely inside `ViewContext.HttpContext.Items`[cite: 9]. This dictionary is strictly scoped to the lifecycle of the current HTTP request[cite: 9].
-*   **Automatic HTML Output:** The helper strips the original `<sn-cell>` wrapper by setting `output.TagName = null` and dynamically replaces it with a fully formed `<td class='table-cell'>` containing the newly incremented number[cite: 9].
-*   **Zero Initialization Boilerplate:** If the counter dictionary key doesn't exist yet for the given `CounterName`, the helper automatically initializes it to `Start + 1` (defaulting to 1)[cite: 9]. Subsequent calls increment the stored value by 1[cite: 9].
+*   **Request-Scoped State Tracking:** Instead of using static variables (which would cause massive race conditions across different users), the helper stores the current counter value safely inside `ViewContext.HttpContext.Items`. This dictionary is strictly scoped to the lifecycle of the current HTTP request.
+*   **Automatic HTML Output:** The helper strips the original `<sn-cell>` wrapper by setting `output.TagName = null` and dynamically replaces it with a fully formed `<td class='table-cell'>` containing the newly incremented number.
+*   **Zero Initialization Boilerplate:** If the counter dictionary key doesn't exist yet for the given `CounterName`, the helper automatically initializes it to `Start + 1` (defaulting to 1). Subsequent calls increment the stored value by 1.
 
 ---
 

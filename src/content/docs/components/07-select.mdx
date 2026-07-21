@@ -3,13 +3,13 @@ title: Custom Select Tag Helper
 description: Architecture and usage of the `<custom-select>` tag helper for streamlined dropdown rendering.
 ---
 
-The `CustomSelectTagHelper` is a centralized component that simplifies the creation of HTML `<select>` dropdowns within Razor views. Similar to the custom input helper, it automatically generates the surrounding form group, labels, required indicators, and option loops, significantly reducing boilerplate markup in your forms[cite: 7].
+The `CustomSelectTagHelper` is a centralized component that simplifies the creation of HTML `<select>` dropdowns within Razor views. Similar to the custom input helper, it automatically generates the surrounding form group, labels, required indicators, and option loops, significantly reducing boilerplate markup in your forms.
 
 ---
 
 ## Component Implementation
 
-This tag helper extends the standard ASP.NET Core `TagHelper` class and is triggered whenever the `<custom-select>` element is used alongside the mandatory `asp-for` attribute[cite: 7].
+This tag helper extends the standard ASP.NET Core `TagHelper` class and is triggered whenever the `<custom-select>` element is used alongside the mandatory `asp-for` attribute.
 
 ```csharp
 // TagHelpers/CustomSelectTagHelper.cs

@@ -74,8 +74,8 @@ Here is an example of a reusable table actions cell component (`ActionTd`) which
 
 To consume a Shared Partial View, call `Html.PartialAsync` from a parent Razor view. Pass the name of the template as the first parameter, and initialize a new instance of its corresponding View Model as the second parameter.
 
-```razor
-@* Views/Role/Index.cshtml *@
+```razor ins={27-32}
+<!-- Views/Role/Index.cshtml -->
 @using TimeManager.Backend.Models.Components
 @using TimeManager.Backend.ViewModels
 @model IEnumerable<RoleViewModel>
@@ -268,11 +268,9 @@ namespace TimeManager.Backend.TagHelpers
 
 By setting up this single file, we can immediately start using the custom `<custom-input>` tag throughout any Razor view in our application. The rendered input type and UI rules are automatically inferred from the model's standard ASP.NET DataAnnotations.
 
-Here is the continuation of your MDX document, starting directly from the **Example usage** section. This has been styled to flow seamlessly from the previous part with clean headings, formatted file paths, and polished phrasing.
-
 ### Usage
 
-Below is a practical implementation showing how the custom Tag Helper integrates with your models and Razor views to create clean, declarative markup.
+Below is a practical implementation showing how the custom Tag Helper integrates with models and Razor views to create clean, declarative markup.
 
 #### 1. Define the View Model
 
@@ -305,7 +303,7 @@ namespace TimeManager.Backend.ViewModels
 
 Instead of writing custom wrappers, labels, and validation message tags for every field, we simply declare our custom `<custom-input>` tag.
 
-```razor
+```razor ins={10, 11}
 // Views/Role/Create.cshtml
 
 @model TimeManager.Backend.ViewModels.RoleViewModel

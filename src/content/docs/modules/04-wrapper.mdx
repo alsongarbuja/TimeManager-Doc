@@ -5,7 +5,7 @@ description: Architecture of reusable UI shell wrappers utilizing ASP.NET Core R
 
 import { Aside } from '@astrojs/starlight/components';
 
-In this architecture, **Wrappers** function identically to Layouts (`_MainLayout`, `_AdminLayout`) under the hood—they are nested Razor layout files. However, while Layouts manage global *structural* concerns (like navigation and head tags), **Wrappers manage specific *content patterns***.
+In this architecture, **Wrappers** function identically to [Layouts](../03-layout/) (`_MainLayout`, `_AdminLayout`) under the hood—they are nested Razor layout files. However, while Layouts manage global *structural* concerns (like navigation and head tags), **Wrappers manage specific *content patterns***.
 
 By extracting repetitive container boilerplate (like table headers, pagination controls, and form shells) into dedicated Wrapper files, we keep our individual CRUD views incredibly thin and maintainable.
 
