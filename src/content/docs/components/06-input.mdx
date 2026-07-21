@@ -1,0 +1,213 @@
+---
+title: Input Tag Helper
+description: Architecture and usage of the `<custom-input>` tag helper for streamlined form rendering.
+---
+
+The `CustomInputTagHelper` is a powerful, centralized component designed to drastically reduce boilerplate HTML in Razor views. By simply invoking the `<custom-input>` element, this tag helper automatically generates the label, the appropriately typed input field, validation error spans, and optional helper text.
+
+---
+
+## Component Implementation
+
+This tag helper extends the base ASP.NET Core `TagHelper` class and is triggered anytime the `<custom-input>` tag is used alongside the mandatory `asp-for` attribute.
+
+```csharp
+// TagHelpers/CustomInputTagHelper.cs
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Microsoft.AspNetCore.Razor.TagHelpers;
+
+namespace TimeManager.Backend.TagHelpers
+{
+    [HtmlTargetElement("custom-input", Attributes="asp-for")]
+    public class CustomInputTagHelper: TagHelper
+    {
+        [HtmlAttributeName("asp-for")]
+        public required ModelExpression For { get; set; }
+
+        [HtmlAttributeNotBound]
+        [ViewContext]
+        public ViewContext ViewContext { get; set; }
+
+        [HtmlAttributeName("classes")]
+        public string? Classes { get; set; }
+
+        [HtmlAttributeName("required")]
+        public bool? Required { get; set; }
+
+        [HtmlAttributeName("helperText")]
+        public string? HelperText { get; set; }
+
+        public override void Process(TagHelperContext context, TagHelperOutput output)
+        {
+            var propertyName = For.Name;
+            var labelText = For.Metadata.DisplayName ?? For.Metadata.PropertyName ?? propertyName;
+            var isRequired = Required ?? For.Metadata.IsRequired;
+            var isMultiLine = For.Metadata.DataTypeName == "MultilineText";
+
+            var required = isRequired ? "<span class='form-required'>*</span>" : string.Empty;
+            var inputIsRequired = isRequired ? "required" : string.Empty;
+
+            var propertyValue = For.Model?.ToString() ?? string.Empty;
+
+            string type = "text";
+
+            if (For.Metadata.DataTypeName == "Password")
+            {
+                type = "password";
+            } else if (For.Metadata.DataTypeName == "Time" || For.ModelExplorer.ModelType == typeof(TimeOnly) || For.ModelExplorer.ModelType == typeof(TimeOnly?))
+            {
+                type = "time";
+            }
+            else if (For.ModelExplorer.ModelType == typeof(int) || For.ModelExplorer.ModelType == typeof(int?) ||
+            For.ModelExplorer.ModelType == typeof(decimal) || For.ModelExplorer.ModelType == typeof(decimal?))
+            {
+                type = "number";
+            }
+            else if (For.ModelExplorer.ModelType == typeof(DateTimeOffset) || For.ModelExplorer.ModelType == typeof(DateTimeOffset?) || For.ModelExplorer.ModelType == typeof(DateTime) || For.ModelExplorer.ModelType == typeof(DateTime?))
+            {
+                type = "datetime-local";
+            } else if (For.ModelExplorer.ModelType == typeof(IFormFile))
+            {
+                type = "file";
+            }
+
+            var formattedValue = propertyValue;
+
+            if (type == "datetime-local")
+            {
+                if (For.Model is DateTimeOffset dto)
+                {
+                    formattedValue = dto.ToLocalTime().ToString("yyyy-MM-ddTHH:mm");
+                } else if (For.Model is DateTime dt)
+                {
+                    formattedValue = dt.ToLocalTime().ToString("yyyy-MM-ddTHH:mm");
+                }
+            } else if (type == "time")
+            {
+                if (For.Model is TimeOnly t)
+                {
+                    formattedValue = t.ToString("HH:mm");
+                }
+            }
+
+            var hasErrors = ViewContext.ModelState.TryGetValue(propertyName, out var modelStateEntry) && modelStateEntry.Errors.Any();
+
+            var errorMessage = hasErrors ? modelStateEntry?.Errors.First().ErrorMessage : string.Empty;
+
+            var classes = hasErrors ? "form-input form-input-error" : "form-input";
+
+            var input = isMultiLine
+                ? $"<textarea name='{propertyName}' class='{classes}'>{System.Net.WebUtility.HtmlEncode(formattedValue)}</textarea>"
+                : $"<input name='{propertyName}' {inputIsRequired} value='{formattedValue}' class='{classes}' type='{type}' />";
+
+            if (type == "password")
+            {
+                input = $"<div class='password-toggle-wrapper'>" +
+                            $"{input}" +
+                            $"<button type='button' class='password-toggle-btn' onclick='togglePasswordVisibility(this)'>" +
+                                $"<i class='ri-eye-off-line'></i>" +
+                            $"</button>" +
+                        $"</div>";
+            }
+
+            if (type == "datetime-local")
+            {
+                input = $"<div class='datetime-clear-wrapper'>" +
+                            $"{input}" +
+                            $"<button type='button' class='datetime-clear-btn' onclick='this.previousElementSibling.value=\"\"; this.previousElementSibling.dispatchEvent(new Event(\"change\"))'>" +
+                                $"<i class='ri-close-line'></i>" +
+                            $"</button>" +
+                        $"</div>";
+            }
+
+            var helperSpan = !string.IsNullOrEmpty(HelperText)
+                ? $"<span class='form-input-helper-text'>{HelperText}</span>"
+                : string.Empty;
+
+            var errorSpan = hasErrors
+                   ? $"<span class='form-error'>{errorMessage}</span>"
+                   : string.Empty;
+
+            output.TagName = null;
+
+            output.Content.SetHtmlContent(
+                $"<div class='form-group {Classes}'>" +
+                    $"<label class='form-label'>{labelText}{required}</label>" +
+                    $"<div class='form-input-wrapper'>{input}</div>" +
+                    $"{helperSpan}" +
+                    $"{errorSpan}" +
+                $"</div>"
+            );
+        }
+    }
+}
+
+```
+
+---
+
+## Configuration Properties
+
+The following attributes can be applied to the `<custom-input>` tag in your Razor views to control its behavior:
+
+| Attribute | C# Property binding | Description |
+| --- | --- | --- |
+| **`asp-for`** | `For` | **Required.** This binds the input directly to the View Model's property expression.
+| **`classes`** | `Classes` | Optional string used to append custom CSS classes directly to the parent `.form-group` div.
+| **`required`** | `Required` | Optional boolean that manually overrides the required validation state derived from the model's metadata.
+| **`helperText`** | `HelperText` | Optional string that injects a `.form-input-helper-text` span directly below the input field.
+
+---
+
+## Core Features
+
+This tag helper handles complex formatting and state management automatically:
+
+* **Dynamic Type Inference:** The helper automatically assigns the correct HTML `type` attribute (such as `number`, `file`, `time`, or `password`) based on the C# model's underlying type or `[DataType]` annotations.
+
+
+* **DateTime Formatting:** For `DateTime` and `DateTimeOffset` properties, the helper safely formats the local time to the precise `yyyy-MM-ddTHH:mm` structure required by HTML `datetime-local` inputs.
+
+
+* **Multiline Rendering:** If the model's metadata specifies a `MultilineText` data type, the helper intelligently swaps the standard `<input>` tag for a `<textarea>` element.
+
+
+* **Validation State Management:** The helper evaluates the `ViewContext.ModelState` for the specific property. If validation errors are detected, it applies a `form-input-error` CSS class to the input and renders the exact error message in a `span` below it.
+
+
+* **Interactive UI Wrappers:** Password fields automatically generate a toggle button (`ri-eye-off-line` icon) to allow users to show or hide their password. Additionally, `datetime-local` fields generate a clear button (`ri-close-line` icon) to easily reset the value.
+
+
+
+---
+
+## Example Usage
+
+Instead of writing out a `<div>`, a `<label>`, an `<input>`, and a `<span asp-validation-for="...">` manually for every field, you can leverage the tag helper to generate the entire block cleanly.
+
+```razor {9-11}
+@* Views/Employee/Create.cshtml *@
+@model TimeManager.Backend.ViewModels.EmployeeViewModel
+
+<form asp-controller="Employee" asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="form-grid">
+        <!-- Standard text input -->
+        <custom-input asp-for="FirstName" />
+
+        <!-- Input with custom wrapper class and helper text -->
+        <custom-input asp-for="Email" classes="grid-col-2" helperText="Must use a valid company email address." />
+
+        <!-- Automatically renders as a password field with a visibility toggle -->
+        <custom-input asp-for="Password" />
+
+        <!-- Automatically renders as a datetime-local input with a clear button -->
+        <custom-input asp-for="HireDate" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save Employee</button>
+</form>
+
+```

@@ -1,0 +1,111 @@
+---
+title: IP Input Tag Helper
+description: Architecture and usage of the `<ip-input>` tag helper for specialized IPv4 address form fields.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `IPInputTagHelper` is a specialized form component designed exclusively for capturing and validating IPv4 network addresses[cite: 8]. By using the `<ip-input>` tag, you automatically generate a text field equipped with strict HTML5 pattern validation, ensuring users can only submit correctly formatted IP strings[cite: 8].
+
+---
+
+## Component Implementation
+
+This tag helper extends the ASP.NET Core `TagHelper` base class and is invoked using the `<ip-input>` HTML target element alongside the required `asp-for` attribute[cite: 8].
+
+<Tabs>
+  <TabItem label="TagHelpers/IPInputTagHelper.cs" icon="document">
+    ```csharp
+    using Microsoft.AspNetCore.Mvc.ViewFeatures;
+    using Microsoft.AspNetCore.Razor.TagHelpers;
+
+    namespace TimeManager.Backend.TagHelpers
+    {
+        [HtmlTargetElement("ip-input", Attributes = "asp-for")]
+        public class IPInputTagHelper : TagHelper
+        {
+            [HtmlAttributeName("asp-for")]
+            public required ModelExpression For { get; set; }
+
+            public override void Process(TagHelperContext context, TagHelperOutput output)
+            {
+                var propertyName = For.Name;
+                var labelText = For.Metadata.DisplayName ?? For.Metadata.PropertyName ?? propertyName;
+                var isRequired = For.Metadata.IsRequired;
+
+                var requiredIndicator = isRequired ? "<span class='form-required'>*</span>" : string.Empty;
+                var inputIsRequired = isRequired ? "required" : string.Empty;
+                var propertyValue = For.Model?.ToString() ?? string.Empty;
+
+                var ipPattern = @"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
+                var placeholder = "198.168.1.1";
+                var titleMessage = "Please enter a valid IPV4 address (e.g. 192.168.1.1)";
+
+                var input = $"<input name='{propertyName}' " +
+                                 $"{inputIsRequired} " +
+                                 $"value='{propertyValue}' " +
+                                 $"pattern='{ipPattern}' " +
+                                 $"placeholder='{placeholder}' " +
+                                 $"title='{titleMessage}' " +
+                                 $"class='form-input' " +
+                                 $"type='text' />";
+
+                output.TagName = null;
+
+                output.Content.SetHtmlContent(
+                    $"<div class='form-group'>" +
+                        $"<label class='form-label'>{labelText}{requiredIndicator}</label>" +
+                        $"<div class='form-input-wrapper'>{input}</div>" +
+                    $"</div>"
+                );
+            }
+        }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Configuration Properties
+
+Unlike the broader `<custom-input>` helper, the IP input is highly focused and requires minimal configuration[cite: 8].
+
+| Attribute | C# Property Binding | Description |
+| :--- | :--- | :--- |
+| **`asp-for`** | `For` | **Required.** Binds the input element directly to the View Model's property expression[cite: 8]. |
+
+---
+
+## Core Features
+
+This tag helper abstracts complex validation and layout rules into a single tag:
+
+*   **Strict IPv4 Validation:** The helper injects a complex regular expression (`^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$`) directly into the HTML `pattern` attribute[cite: 8]. This forces the browser to validate that the input consists of four dot-separated octets, each ranging from 0 to 255[cite: 8].
+*   **Built-in Tooltips & Placeholders:** It automatically adds a placeholder (`198.168.1.1`) and a custom `title` attribute message (`Please enter a valid IPV4 address (e.g. 192.168.1.1)`), which the browser displays if the user violates the regex pattern[cite: 8].
+*   **Automated Labeling & State:** The helper reads the model metadata to generate the `<label>` text and applies a `required` attribute (with a visual `*` indicator) if the property is marked as required in the C# model[cite: 8].
+*   **Clean Structural Output:** It completely strips the original `<ip-input>` wrapper by setting `output.TagName = null` and replaces it with standard `.form-group` and `.form-input-wrapper` container `<div>` elements[cite: 8].
+
+---
+
+## Example Usage
+
+Here is how you implement the IP Input tag helper for a network configuration or kiosk setup form.
+
+```razor
+@* Views/Kiosk/Create.cshtml *@
+@model TimeManager.Backend.ViewModels.KioskViewModel
+
+<form asp-controller="Kiosk" asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="form-grid">
+        <custom-input asp-for="KioskName" />
+
+        <!-- Automated IPv4 Field Render -->
+        <ip-input asp-for="IpAddress" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save Kiosk</button>
+</form>
+```

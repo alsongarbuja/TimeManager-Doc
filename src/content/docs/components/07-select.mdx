@@ -1,0 +1,135 @@
+---
+title: Custom Select Tag Helper
+description: Architecture and usage of the `<custom-select>` tag helper for streamlined dropdown rendering.
+---
+
+The `CustomSelectTagHelper` is a centralized component that simplifies the creation of HTML `<select>` dropdowns within Razor views. Similar to the custom input helper, it automatically generates the surrounding form group, labels, required indicators, and option loops, significantly reducing boilerplate markup in your forms[cite: 7].
+
+---
+
+## Component Implementation
+
+This tag helper extends the standard ASP.NET Core `TagHelper` class and is triggered whenever the `<custom-select>` element is used alongside the mandatory `asp-for` attribute[cite: 7].
+
+```csharp
+// TagHelpers/CustomSelectTagHelper.cs
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Microsoft.AspNetCore.Razor.TagHelpers;
+
+namespace TimeManager.Backend.TagHelpers
+{
+    [HtmlTargetElement("custom-select", Attributes = "asp-for")]
+    public class CustomSelectTagHelper : TagHelper
+    {
+        [HtmlAttributeName("asp-for")]
+        public required ModelExpression For { get; set; }
+
+        [HtmlAttributeName("asp-items")]
+        public IEnumerable<SelectListItem> Items { get; set; } = [];
+
+        [HtmlAttributeName("placeholder")]
+        public string? Placeholder { get; set; }
+
+        [HtmlAttributeName("classes")]
+        public string? Classes { get; set; }
+
+        [HtmlAttributeName("required")]
+        public bool? Required { get; set; }
+
+        public override void Process(TagHelperContext context, TagHelperOutput output)
+        {
+            var propertyName = For.Name;
+            var labelText = For.Metadata.DisplayName ?? For.Metadata.PropertyName ?? propertyName;
+            var isRequired = Required ?? For.Metadata.IsRequired;
+
+            output.TagName = null;
+
+            var requiredAttr = isRequired ? "required" : string.Empty;
+            var requiredSpan = isRequired ? "<span class='form-required'>*</span>" : string.Empty;
+
+            var options = string.Empty;
+
+            if (!string.IsNullOrEmpty(Placeholder))
+                options += $"<option value=''>{Placeholder}</option>";
+
+            if (Items != null)
+            {
+                foreach (var item in Items)
+                {
+                    var selected = item.Selected ? "selected" : string.Empty;
+                    options += $"<option value='{item.Value}' {selected}>{item.Text}</option>";
+                }
+            }
+
+            output.Content.SetHtmlContent($@"
+                <div class='form-group {Classes}'>
+                    <label for='{propertyName}' class='form-label fw-semibold'>
+                        {labelText} {requiredSpan}
+                    </label>
+                    <select id='{propertyName}'
+                            name='{propertyName}'
+                            class='form-input'
+                            {requiredAttr}>
+                        {options}
+                    </select>
+                </div>
+            ");
+        }
+    }
+}
+
+```
+
+---
+
+## Configuration Properties
+
+The following attributes can be applied to the `<custom-select>` tag in your Razor views to control its rendering behavior:
+
+| Attribute | C# Property Binding | Description |
+| --- | --- | --- |
+| **`asp-for`** | `For` | **Required.** Binds the select element to the View Model's property expression to automatically derive names and labels.
+| **`asp-items`** | `Items` | An `IEnumerable<SelectListItem>` collection used to dynamically generate the `<option>` tags inside the dropdown.
+| **`placeholder`** | `Placeholder` | Optional string that prepends a default, empty-value `<option>` at the very top of the dropdown list.
+| **`classes`** | `Classes` | Optional string to append custom CSS classes directly to the parent `.form-group` wrapper `<div>`.
+| **`required`** | `Required` | Optional boolean that manually overrides the validation requirement state derived from the model's metadata.
+
+---
+
+## Core Features
+
+This tag helper abstracts away the repetitive logic of building select elements:
+
+* **Dynamic Data Binding:** By passing an `IEnumerable<SelectListItem>` to the `asp-items` attribute, the helper automatically iterates through the collection and builds the internal `<option>` tags.
+* **State Retention:** During iteration, it checks the `Selected` property of each `SelectListItem` and safely applies the HTML `selected` attribute to preserve user choices across form submissions.
+* **Placeholder Injection:** If a placeholder string is provided, the helper injects an initial `<option value=''>` at the beginning of the list, forcing the user to make a distinct selection.
+* **Automated Labeling:** Just like the custom input helper, it extracts the display name from the property's metadata to cleanly construct the associated `<label>`.
+
+---
+
+## Example Usage
+
+Here is how you replace standard ASP.NET dropdown logic with the custom tag helper to render a department selection field.
+
+```razor {10-15}
+@* Views/Employee/Create.cshtml *@
+@model TimeManager.Backend.ViewModels.EmployeeViewModel
+
+<form asp-controller="Employee" asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="form-grid">
+        <custom-input asp-for="Name" />
+
+        <!-- Automated Select Render -->
+        <custom-select
+            asp-for="DepartmentId"
+            asp-items="@Model.Departments"
+            placeholder="Select a department..."
+            classes="grid-col-2" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+</form>
+```

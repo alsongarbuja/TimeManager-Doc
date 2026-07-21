@@ -1,0 +1,130 @@
+---
+title: Serial Number Tag Helper
+description: Architecture and usage of the `<sn-cell>` tag helper for generating auto-incrementing table row numbers.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `SerialNumberTagHelper` is a specialized structural component that provides a clean, declarative way to generate sequential row numbers (S.N.) inside HTML data tables.
+
+By using the `<sn-cell>` tag, you eliminate the need to manually declare and increment integer counter variables (`int i = 1; i++`) inside your Razor `@foreach` loops.
+
+---
+
+## Component Implementation
+
+This tag helper extends the standard ASP.NET Core `TagHelper` class and targets the custom `<sn-cell>` HTML element[cite: 9].
+
+<Tabs>
+  <TabItem label="TagHelpers/SerialNumberTagHelper.cs" icon="document">
+    ```csharp
+    using Microsoft.AspNetCore.Mvc.Rendering;
+    using Microsoft.AspNetCore.Mvc.ViewFeatures;
+    using Microsoft.AspNetCore.Razor.TagHelpers;
+
+    namespace TimeManager.Backend.TagHelpers
+    {
+        [HtmlTargetElement("sn-cell")]
+        public class SerialNumberTagHelper : TagHelper
+        {
+            [HtmlAttributeName("counter-name")]
+            public string CounterName { get; set; } = "default";
+
+            [HtmlAttributeName("start")]
+            public int Start { get; set; } = 0;
+
+            [ViewContext]
+            public ViewContext ViewContext { get; set; } = default!;
+
+            public override void Process(TagHelperContext context, TagHelperOutput output)
+            {
+                var key = $"SnCounter_{CounterName}";
+                var items = ViewContext.HttpContext.Items;
+
+                int current;
+                if (!items.ContainsKey(key))
+                {
+                    current = Start + 1;
+                }
+                else
+                {
+                    current = (int)items[key]! + 1;
+                }
+                items[key] = current;
+
+                output.TagName = null;
+                output.Content.SetHtmlContent(
+                    $"<td class='table-cell'>" +
+                    current.ToString() +
+                    $"</td>"
+                );
+            }
+        }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Configuration Properties
+
+The following attributes can be applied to the `<sn-cell>` tag to control the counting behavior:
+
+| Attribute | C# Property Binding | Default | Description |
+| :--- | :--- | :--- | :--- |
+| **`counter-name`** | `CounterName` | `"default"` | Allows multiple independent counters to exist on the same page by utilizing unique string identifiers[cite: 9]. |
+| **`start`** | `Start` | `0` | The baseline numerical offset for the counter[cite: 9]. (e.g., If set to `10`, the first generated cell will be `11`[cite: 9]). |
+
+---
+
+## Core Features
+
+This tag helper leverages the ASP.NET Core request pipeline to manage state efficiently:
+
+*   **Request-Scoped State Tracking:** Instead of using static variables (which would cause massive race conditions across different users), the helper stores the current counter value safely inside `ViewContext.HttpContext.Items`[cite: 9]. This dictionary is strictly scoped to the lifecycle of the current HTTP request[cite: 9].
+*   **Automatic HTML Output:** The helper strips the original `<sn-cell>` wrapper by setting `output.TagName = null` and dynamically replaces it with a fully formed `<td class='table-cell'>` containing the newly incremented number[cite: 9].
+*   **Zero Initialization Boilerplate:** If the counter dictionary key doesn't exist yet for the given `CounterName`, the helper automatically initializes it to `Start + 1` (defaulting to 1)[cite: 9]. Subsequent calls increment the stored value by 1[cite: 9].
+
+---
+
+## Example Usage
+
+Here is how you replace manual Razor counting logic with the `<sn-cell>` tag helper inside a standard table loop.
+
+```razor {16-17}
+@* Views/Department/Index.cshtml *@
+@model IEnumerable<TimeManager.Backend.ViewModels.DepartmentViewModel>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>S.N.</th>
+            <th>Department Name</th>
+            <th>Code</th>
+        </tr>
+    </thead>
+    <tbody class="table-body">
+        @foreach (var item in Model)
+        {
+            <tr>
+                <!-- Automatically generates an incrementing <td> element starting at 1 -->
+                <sn-cell counter-name="ControllerName"></sn-cell>
+
+                <td>@item.Name</td>
+                <td>@item.Code</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+```
+
+### Advanced Usage (Pagination Support)
+
+If you are rendering a paginated table and need the serial numbers to continue seamlessly from the previous page, you can dynamically inject the `start` attribute based on the current page size and index.
+
+```razor
+<!-- If on Page 3 with 10 items per page, the start index is 20. The first cell will render as 21. -->
+<sn-cell start="@((Model.PageNumber - 1) * Model.PageSize)"></sn-cell>
+```
