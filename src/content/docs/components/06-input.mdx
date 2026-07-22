@@ -5,6 +5,10 @@ description: Architecture and usage of the `<custom-input>` tag helper for strea
 
 The `CustomInputTagHelper` is a powerful, centralized component designed to drastically reduce boilerplate HTML in Razor views. By simply invoking the `<custom-input>` element, this tag helper automatically generates the label, the appropriately typed input field, validation error spans, and optional helper text.
 
+:::note
+In order for the tag helper partial views to work we need to add `"@addTagHelper *, TimeManager.Backend"` inside the `/Views/_ViewImports.cshtml` file. If there is no _ViewImports file inside Views folder then create one and add `"@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers"` and `@addTagHelper *, TimeManager.Backend`
+:::
+
 ---
 
 ## Component Implementation
