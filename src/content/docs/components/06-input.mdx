@@ -23,8 +23,8 @@ using Microsoft.AspNetCore.Razor.TagHelpers;
 
 namespace TimeManager.Backend.TagHelpers
 {
-    [HtmlTargetElement("custom-input", Attributes="asp-for")]
-    public class CustomInputTagHelper: TagHelper
+    [HtmlTargetElement("custom-input", Attributes = "asp-for")]
+    public class CustomInputTagHelper : TagHelper
     {
         [HtmlAttributeName("asp-for")]
         public required ModelExpression For { get; set; }
@@ -42,12 +42,21 @@ namespace TimeManager.Backend.TagHelpers
         [HtmlAttributeName("helperText")]
         public string? HelperText { get; set; }
 
+        [HtmlAttributeName("min")]
+        public string? Min { get; set; }
+
+        [HtmlAttributeName("max")]
+        public string? Max { get; set; }
+
         public override void Process(TagHelperContext context, TagHelperOutput output)
         {
-            var propertyName = For.Name;
+            var propertyName = ViewContext.ViewData.TemplateInfo
+                .GetFullHtmlFieldName(For.Name);
             var labelText = For.Metadata.DisplayName ?? For.Metadata.PropertyName ?? propertyName;
             var isRequired = Required ?? For.Metadata.IsRequired;
             var isMultiLine = For.Metadata.DataTypeName == "MultilineText";
+            var maxValue = Max;
+            var minValue = Min;
 
             var required = isRequired ? "<span class='form-required'>*</span>" : string.Empty;
             var inputIsRequired = isRequired ? "required" : string.Empty;
@@ -59,7 +68,8 @@ namespace TimeManager.Backend.TagHelpers
             if (For.Metadata.DataTypeName == "Password")
             {
                 type = "password";
-            } else if (For.Metadata.DataTypeName == "Time" || For.ModelExplorer.ModelType == typeof(TimeOnly) || For.ModelExplorer.ModelType == typeof(TimeOnly?))
+            }
+            else if (For.Metadata.DataTypeName == "Time" || For.ModelExplorer.ModelType == typeof(TimeOnly) || For.ModelExplorer.ModelType == typeof(TimeOnly?))
             {
                 type = "time";
             }
@@ -71,7 +81,8 @@ namespace TimeManager.Backend.TagHelpers
             else if (For.ModelExplorer.ModelType == typeof(DateTimeOffset) || For.ModelExplorer.ModelType == typeof(DateTimeOffset?) || For.ModelExplorer.ModelType == typeof(DateTime) || For.ModelExplorer.ModelType == typeof(DateTime?))
             {
                 type = "datetime-local";
-            } else if (For.ModelExplorer.ModelType == typeof(IFormFile))
+            }
+            else if (For.ModelExplorer.ModelType == typeof(IFormFile))
             {
                 type = "file";
             }
@@ -83,11 +94,13 @@ namespace TimeManager.Backend.TagHelpers
                 if (For.Model is DateTimeOffset dto)
                 {
                     formattedValue = dto.ToLocalTime().ToString("yyyy-MM-ddTHH:mm");
-                } else if (For.Model is DateTime dt)
+                }
+                else if (For.Model is DateTime dt)
                 {
                     formattedValue = dt.ToLocalTime().ToString("yyyy-MM-ddTHH:mm");
                 }
-            } else if (type == "time")
+            }
+            else if (type == "time")
             {
                 if (For.Model is TimeOnly t)
                 {
@@ -103,7 +116,7 @@ namespace TimeManager.Backend.TagHelpers
 
             var input = isMultiLine
                 ? $"<textarea name='{propertyName}' class='{classes}'>{System.Net.WebUtility.HtmlEncode(formattedValue)}</textarea>"
-                : $"<input name='{propertyName}' {inputIsRequired} value='{formattedValue}' class='{classes}' type='{type}' />";
+                : $"<input name='{propertyName}' {inputIsRequired} value='{formattedValue}' class='{classes}' type='{type}' max='{maxValue}' min='{minValue}' />";
 
             if (type == "password")
             {
@@ -146,7 +159,6 @@ namespace TimeManager.Backend.TagHelpers
         }
     }
 }
-
 ```
 
 ---
@@ -161,6 +173,8 @@ The following attributes can be applied to the `<custom-input>` tag in your Razo
 | **`classes`** | `Classes` | Optional string used to append custom CSS classes directly to the parent `.form-group` div.
 | **`required`** | `Required` | Optional boolean that manually overrides the required validation state derived from the model's metadata.
 | **`helperText`** | `HelperText` | Optional string that injects a `.form-input-helper-text` span directly below the input field.
+| **`min`** | `Min` | Optional string that determines the minimum value the input field can hold `(e.g. @Date.Now.ToString("yyyy-MM-ddTHH:mm") to limit date selection from today)`.
+| **`max`** | `Max` | Optional string that determines the maximum value the input field can hold `(e.g. @Date.Now.ToString("yyyy-MM-ddTHH:mm") to limit date selection till today)`.
 
 ---
 
@@ -190,7 +204,7 @@ This tag helper handles complex formatting and state management automatically:
 
 Instead of writing out a `<div>`, a `<label>`, an `<input>`, and a `<span asp-validation-for="...">` manually for every field, you can leverage the tag helper to generate the entire block cleanly.
 
-```razor {9-11}
+```razor ins={9-18}
 @* Views/Employee/Create.cshtml *@
 @model TimeManager.Backend.ViewModels.EmployeeViewModel
 

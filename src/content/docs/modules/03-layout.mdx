@@ -23,18 +23,30 @@ The `_MainLayout` file defines the baseline global `HTML` structure. It acts as 
 
 ```razor title="Views/Shared/_MainLayout.cshtml"
 <!DOCTYPE html>
-<html lang="en">
+
+<html>
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - TimeManager</title>
+    <meta name="viewport" content="width=device-width" />
+
+    <title>@ViewBag.Title</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="~/assets/favicon.svg" />
 
     <!-- Global Fonts -->
-    <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
-    <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Karla:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Karla:ital,wght@0,200..800;1,200..800&display=swap"
+          rel="stylesheet">
 
-    <!-- Stylesheet Architecture -->
+    <!-- Tom-select lib style -->
+    <link rel="stylesheet" href="~/lib/tom-select/css/tom-select.bootstrap5.min.css" />
+
+    <!-- Script for initializing tom-select -->
+    <script src="~/lib/tom-select/js/tom-select.complete.min.js"></script>
+    <script src="~/js/tom-select-init.js"></script>
+
+    <!-- Custom Css -->
     <link href="/css/app.css" rel="stylesheet" />
     <link href="/css/utility.css" rel="stylesheet" />
     <link href="/css/components.css" rel="stylesheet" />
@@ -42,21 +54,18 @@ The `_MainLayout` file defines the baseline global `HTML` structure. It acts as 
     <link href="/css/wrapper.css" rel="stylesheet" />
 
     <!-- Vector Assets -->
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@@4.2.0/fonts/remixicon.css" rel="stylesheet" />
 
-    <!-- View-Specific Head Overrides -->
-    @await RenderSectionAsync("styles", required: false)
+    <!-- View-Specific scripts and styles -->
+    @RenderSection("styles", required: false)
+    @RenderSection("scripts", required: false)
 </head>
 <body>
-    <div class="app-root">
+    <div>
         @RenderBody()
     </div>
-
-    <!-- View-Specific Deferred Scripts -->
-    @await RenderSectionAsync("scripts", required: false)
 </body>
 </html>
-
 ```
 
 ---
@@ -67,58 +76,46 @@ The `_AdminLayout` serves as a **nested sub-layout** that references `_MainLayou
 
 ```razor title="Views/Shared/_AdminLayout.cshtml"
 @{
-    Layout = "_MainLayout";
+  <!-- Inheriting main layout -->
+  Layout = "_MainLayout";
 }
 
-<!-- Forward nested child page configurations up to the parent MainLayout shell -->
-@section styles {
-    @await RenderSectionAsync("styles", required: false)
-}
-@section scripts {
-    <script src="~/js/sidebartoggle.js"></script>
-    <script src="~/js/notification.js"></script>
-    <script src="~/js/modal.js"></script>
-    @await RenderSectionAsync("scripts", required: false)
-}
-
+<head>
+  @RenderSection("styles", required: false)
+  @RenderSection("scripts", required: false)
+</head>
 <main class="layout-main">
-    <!-- Navigation Infrastructure Component -->
     @await Html.PartialAsync("Sidenav")
-
     <div class="layout-section">
         <header class="header">
-            <button class="menu-btn" onclick="sidebarToggle()" aria-label="Toggle Sidebar">
-                <i class="ri-menu-line"></i>
-            </button>
-
+            <button class="menu-btn" onclick="sidebarToggle()"><i class="ri-menu-line"></i></button>
             <form asp-controller="Auth" asp-action="Logout" method="post">
                 @await Html.PartialAsync("Button", new TimeManager.Backend.ViewModels.PartialViews.ButtonViewModel
                 {
-                    Id = "btn-session-logout",
+                    Id = "",
                     Classes = "btn-logout",
                     Text = "Logout",
                     Type = "submit"
                 })
             </form>
         </header>
-
         <section class="main-section" id="main-content" tabindex="-1" role="main">
-            <!-- Inject sub-child application dashboard content -->
             @RenderBody()
         </section>
     </div>
 </main>
 
-<!-- Unified System Overlay Portals -->
 <div class="modal-overlay">
     <div class="modal-wrapper">
         @await RenderSectionAsync("modalcontent", required: false)
     </div>
 </div>
-
-<!-- Reactive Notification Infrastructure Component -->
 @await Html.PartialAsync("NotificationToast")
 
+<!-- Global scripts for sidebar, notification and modal -->
+<script src="~/js/sidebartoggle.js"></script>
+<script src="~/js/notification.js"></script>
+<script src="~/js/modal.js"></script>
 ```
 
 ---

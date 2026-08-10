@@ -92,7 +92,7 @@ namespace TimeManager.Backend.Utility
 
 Hardcoding hundreds of specific Entity Framework Core `Where()` clauses for complex filtering dashboards is impossible to maintain.
 
-The `ExpressionBuilder` class is a powerful generic utility that constructs raw **LINQ Expressions** at runtime. You pass it a property name (e.g., `"DepartmentName"`), an operator (e.g., `Contains`), and a value, and it dynamically compiles the required C# logic tree to safely query the SQL database.
+The `ExpressionBuilder` class is a powerful generic utility that constructs raw **LINQ Expressions** at runtime. You pass it a list of property name (e.g., `"DepartmentName"`), an operator (e.g., `Contains`), and a value, and it dynamically compiles the required C# logic tree to safely query the SQL database.
 
 ```csharp
 // Utility/ExpressionBuilder.cs
@@ -122,15 +122,28 @@ namespace TimeManager.Backend.Utility
 
     public class ExpressionBuilder<T>
     {
-        public Expression<Func<T, bool>>? BuildPredicate(FilterCondition filterCondition)
+
+        public Expression<Func<T, bool>>? BuildPredicate(FilterCondition filter)
         {
-            if (string.IsNullOrEmpty(filterCondition.PropertyName)) return null;
-
+            if (string.IsNullOrEmpty(filter.PropertyName)) return null;
             var parameter = Expression.Parameter(typeof(T), "x");
-            var property = Expression.Property(parameter, filterCondition.PropertyName);
-            var constant = BuildConstantExpression(filterCondition.Value, property.Type);
+            var comparision = BuildComparision(filter, parameter);
 
-            Expression comparison = filterCondition.Operator switch
+            return Expression.Lambda<Func<T, bool>>(comparision, parameter);
+        }
+
+        private Expression BuildComparision(FilterCondition filter, ParameterExpression parameter)
+        {
+            Expression property = parameter;
+
+            foreach (var propName in filter.PropertyName.Split("."))
+            {
+                property = Expression.Property(property, propName);
+            }
+
+            var constant = BuildConstantExpression(filter.Value, property.Type);
+
+            return filter.Operator switch
             {
                 FilterOperator.Equals => Expression.Equal(property, constant),
                 FilterOperator.NotEquals => Expression.NotEqual(property, constant),
@@ -138,16 +151,41 @@ namespace TimeManager.Backend.Utility
                 FilterOperator.LessThan => Expression.LessThan(property, constant),
                 FilterOperator.GreaterThanOrEqual => Expression.GreaterThanOrEqual(property, constant),
                 FilterOperator.LessThanOrEqual => Expression.LessThanOrEqual(property, constant),
-                FilterOperator.Contains => BuildContainsExpression(property, filterCondition.Value),
-                FilterOperator.StartsWith => BuildStringMethod(property, filterCondition.Value, "StartsWith"),
-                FilterOperator.EndsWith => BuildStringMethod(property, filterCondition.Value, "EndsWith"),
-                _ => throw new NotSupportedException($"Operator {filterCondition.Operator} not supported")
+                FilterOperator.Contains => BuildContainsExpression(property, filter.Value),
+                FilterOperator.StartsWith => BuildStringMethod(property, filter.Value, "StartsWith"),
+                FilterOperator.EndsWith => BuildStringMethod(property, filter.Value, "EndsWith"),
+                _ => throw new NotSupportedException($"Operator {filter.Operator} not supported")
             };
-
-            return Expression.Lambda<Func<T, bool>>(comparison, parameter);
         }
 
-        private Expression BuildContainsExpression(MemberExpression property, object? value)
+        public Expression<Func<T, bool>>? BuildPredicate(IEnumerable<FilterCondition> filters, bool useAnd = true)
+        {
+            var validConditions = filters?.Where(c => !string.IsNullOrEmpty(c.PropertyName)).ToList();
+            if (validConditions == null || !validConditions.Any()) return null;
+
+            var parameter = Expression.Parameter(typeof(T), "x");
+            Expression? combinedExpression = null;
+
+            foreach (var condition in validConditions)
+            {
+                var comparision = BuildComparision(condition, parameter);
+
+                if (combinedExpression == null)
+                {
+                    combinedExpression = comparision;
+                }
+                else
+                {
+                    combinedExpression = useAnd
+                        ? Expression.AndAlso(combinedExpression, comparision)
+                        : Expression.OrElse(combinedExpression, comparision);
+                }
+            }
+
+            return combinedExpression == null ? null : Expression.Lambda<Func<T, bool>>(combinedExpression, parameter);
+        }
+
+        private Expression BuildContainsExpression(Expression property, object? value)
         {
             if (property.Type != typeof(string))
             {
@@ -159,7 +197,7 @@ namespace TimeManager.Backend.Utility
             return Expression.Call(property, method!, constant);
         }
 
-        private Expression BuildStringMethod(MemberExpression property, object? value, string methodName)
+        private Expression BuildStringMethod(Expression property, object? value, string methodName)
         {
             if (property.Type != typeof(string))
             {
@@ -179,6 +217,7 @@ namespace TimeManager.Backend.Utility
                 {
                     throw new InvalidOperationException($"Cannot compare non-nullable type {targetType.Name} with null");
                 }
+
                 return Expression.Constant(null, targetType);
             }
 
@@ -190,7 +229,6 @@ namespace TimeManager.Backend.Utility
         }
     }
 }
-
 ```
 
 ## Example Usage
