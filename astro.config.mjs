@@ -43,6 +43,10 @@ export default defineConfig({
           items: [{ autogenerate: { directory: "adding" } }],
         },
         {
+          label: "Database",
+          items: [{ autogenerate: { directory: "database" } }],
+        },
+        {
           label: "Production",
           items: [{ autogenerate: { directory: "production" } }],
         },
