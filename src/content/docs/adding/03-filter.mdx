@@ -1,3 +1,100 @@
 ---
-title: Adding filter
+title: Adding Filter
+description: A step-by-step guide to implementing the modular filter feature across any entity list.
 ---
+
+import { Steps } from "@astrojs/starlight/components"
+
+Filtering is architected as an extensible, modular feature within the project. Implementing it across any data module requires building an expression using `ExpressionBuilder class` which is then passed to the `Pagination Extensions method`.
+
+## Implementation Steps
+
+<Steps>
+
+1.  **Building LINQ expression with ExpressionBuilder**
+
+    First, we need to create an LINQ expression with `ExpressionBuilder` class.
+
+    ```csharp del={1} ins={2, 6-7} title="Controllers/Punch/PunchController.cs"
+    public async Task<IEnumerable<PunchViewModel>> GetPunchesAsync(int? departmentId)
+    public async Task<PagedResponse<PunchViewModel>> GetPunchesAsync(int? departmentId, FilterCondition filter)
+    {
+        // ...
+
+        var builder = new ExpressionBuilder<PunchEntry>();
+        var whereExpression = builder.BuildPredicate(filter);
+
+        // ...
+
+        return punches;
+    }
+    ```
+
+2.  **After building the expression we pass it through the Pagination extension method**
+
+    After building the expression we pass it to the where argument of `FindWithPaginationAsync` extension method.
+
+    ```csharp del={1} ins={2, 6-7, 20} title="Services/PunchServices.cs"
+    public async Task<IEnumerable<PunchViewModel>> GetPunchesAsync(int? departmentId)
+    public async Task<PagedResponse<PunchViewModel>> GetPunchesAsync(int? departmentId, FilterCondition filter)
+    {
+        // ...
+
+        var builder = new ExpressionBuilder<PunchEntry>();
+        var whereExpression = builder.BuildPredicate(filter);
+
+        (var punches, int totalRecords) = await context.PunchEntry.FindWithPaginationAsync(
+            pe => new PunchViewModel
+            {
+                Id = pe.Id,
+                ClockInTime = pe.ClockIn,
+                ClockOutTime = pe.ClockOut,
+                EmployeeId = pe.JobProfile.Id,
+                Name = $"{pe.JobProfile.Employee.FirstName} {pe.JobProfile.Employee.LastName}"
+            },
+            ((pageNumber - 1) * pageSize),
+            pageSize,
+            whereExpression,
+        );
+
+        return new PagedResponse<PunchViewModel>(punches, pageNumber, pageSize, totalRecords, orderBy, isOrderDescending);
+    }
+    ```
+
+3.  **Multiple filter condition**
+
+    To accomodate multiple filter condition we can simply send `Array<FilterCondition>` to the `BuildPredicate` function which will call the overloaded method from the `ExpressionBuilder` uitlity class.
+
+    ```csharp ins={6-13} title="Services/PunchServices.cs"
+    public async Task<PagedResponse<PunchViewModel>> GetPunchesAsync(int? departmentId, FilterCondition filter)
+    {
+        // ...
+
+        var builder = new ExpressionBuilder<PunchEntry>();
+        var whereExpression = builder.BuildPredicate([
+          new FilterCondition {
+            PropertyName = "JobProfile.Unit.DepartmentId",
+            Operator = FilterOperator.Equals,
+            Value = departmentId?.ToString(),
+          },
+          filter
+        ]);
+
+        (var punches, int totalRecords) = await context.PunchEntry.FindWithPaginationAsync(
+            pe => new PunchViewModel
+            {
+                Id = pe.Id,
+                ClockInTime = pe.ClockIn,
+                ClockOutTime = pe.ClockOut,
+                EmployeeId = pe.JobProfile.Id,
+                Name = $"{pe.JobProfile.Employee.FirstName} {pe.JobProfile.Employee.LastName}"
+            },
+            ((pageNumber - 1) * pageSize),
+            pageSize,
+            whereExpression,
+        );
+
+        return new PagedResponse<PunchViewModel>(punches, pageNumber, pageSize, totalRecords, orderBy, isOrderDescending);
+    }
+    ```
+</Steps>

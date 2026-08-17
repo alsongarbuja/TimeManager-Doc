@@ -1,3 +1,179 @@
 ---
 title: Extensions
+description: Overview and implementation of custom C# extension methods to streamline common operations.
 ---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+In C#, **Extension Methods** allow developers to add new functionality to existing types without modifying the original source code, creating a derived type, or recompiling the original type. They are defined as static methods inside static classes, but they are called as if they were native instance methods on the extended object.
+
+In the TimeManager application, we utilize extension methods heavily to keep our codebase DRY (Don't Repeat Yourself). By extending core ASP.NET and Entity Framework classes—such as `ClaimsPrincipal`, `DbSet<T>`, and `ISession`—we encapsulate repetitive boilerplate logic into clean, chainable, and readable function calls.
+
+---
+
+## 1. ClaimsPrincipal Extensions
+
+The `ClaimsPrincipalExtensions` class provides helper methods for user authentication and authorization. Specifically, it extends the `ClaimsPrincipal` object (which represents the active `User` in ASP.NET Core controllers and Razor views) with an `IsInAnyRole` method. This method accepts an array of role strings and returns a boolean if the user belongs to at least one of them, eliminating the need to write multiple `User.IsInRole()` OR-condition checks.
+
+<Tabs>
+  <TabItem label="Extensions/ClaimsPrincipalExtensions.cs" icon="document">
+    ```csharp
+    using System.Security.Claims;
+
+    namespace TimeManager.Backend.Extensions
+    {
+        public static class ClaimsPrincipalExtensions
+        {
+            public static bool IsInAnyRole(this ClaimsPrincipal user, params string[] roles)
+            {
+                return roles.Any(user.IsInRole);
+            }
+        }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Example Usage" icon="setting">
+    ```razor
+    @* Instead of checking each role individually: *@
+    @* @if (User.IsInRole("Admin") || User.IsInRole("SuperAdmin")) *@
+
+    @* You can pass an array directly using the extension: *@
+    @if (User.IsInAnyRole(AppConstants.AdminRoles()))
+    {
+        <a href="/app/report">View Reports</a>
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 2. DbSet Extensions
+
+The `DbSetExtensions` class enhances Entity Framework Core's `DbSet<T>` to streamline data retrieval and exception handling. It introduces three primary methods:
+*   **`FindOrThrowAsync`**: Attempts to find an entity by its primary key, automatically throwing a `KeyNotFoundException` if the record does not exist.
+*   **`WhereOrThrowAsync`**: Evaluates a custom LINQ expression, throwing a `KeyNotFoundException` if no entity matches the criteria.
+*   **`FindWithPaginationAsync`**: A robust wrapper that combines filtering, sorting, and pagination (Skip/Take) into a single optimized query, returning both the mapped results and the absolute total record count for UI pagination logic.
+
+<Tabs>
+  <TabItem label="Extensions/DbSetExtensions.cs" icon="document">
+    ```csharp
+    using Microsoft.EntityFrameworkCore;
+    using System.Linq.Expressions;
+
+    namespace TimeManager.Backend.Extensions
+    {
+        public static class DbSetExtensions
+        {
+            public static async Task<T> FindOrThrowAsync<T>(this DbSet<T> dbSet, int id) where T : class
+            {
+                var entity = await dbSet.FindAsync(id);
+                return entity ?? throw new KeyNotFoundException($"{typeof(T).Name} was not found");
+            }
+
+            public static async Task<T> WhereOrThrowAsync<T>(this DbSet<T> dbSet, Expression<System.Func<T, bool>> query) where T : class
+            {
+                var entity = await dbSet.Where(query).FirstOrDefaultAsync();
+                return entity ?? throw new KeyNotFoundException($"{typeof(T).Name} for the given query was not found");
+            }
+
+            public static async Task<(List<TResult>, int)> FindWithPaginationAsync<TEntity, TResult>(
+                this DbSet<TEntity> dbSet,
+                Expression<Func<TEntity, TResult>> selector,
+                int skip,
+                int take,
+                Expression<Func<TEntity, bool>>? where = null,
+                Expression<Func<TEntity, object>>? orderBy = null,
+                bool isDescending = false
+                ) where TEntity : class
+            {
+                IQueryable<TEntity> query = dbSet.AsNoTracking().AsQueryable();
+                int totalRecords;
+
+                if (where == null)
+                {
+                    totalRecords = await query.CountAsync();
+                }
+                else
+                {
+                    totalRecords = await query.Where(where).CountAsync();
+                    query = query.Where(where);
+                }
+
+                if (orderBy != null)
+                {
+                    query = isDescending ? query.OrderByDescending(orderBy) : query.OrderBy(orderBy);
+                }
+
+                List<TResult> result = await query.Skip(skip).Take(take).Select(selector).ToListAsync();
+
+                return (result, totalRecords);
+            }
+        }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Example Usage" icon="setting">
+    ```csharp
+    public async Task<DepartmentViewModel> GetDepartmentAsync(int id)
+    {
+        // Automatically throws a 404-friendly exception if missing
+        var department = await _context.Departments.FindOrThrowAsync(id);
+
+        return new DepartmentViewModel { Name = department.Name };
+    }
+
+    public async Task<PagedResponse<UserViewModel>> GetUsersAsync(int pageNumber, int pageSize)
+    {
+        // Cleanly execute pagination and mapping in one call
+        (var users, int totalRecords) = await _context.Users.FindWithPaginationAsync(
+            selector: u => new UserViewModel { Id = u.Id, Username = u.Username },
+            skip: (pageNumber - 1) * pageSize,
+            take: pageSize
+        );
+
+        return new PagedResponse<UserViewModel>(users, totalRecords);
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 3. Session Extensions
+
+The `SessionExtensions` class extends the ASP.NET Core `ISession` interface to provide explicitly typed, named getter methods. Instead of using raw "magic strings" to extract integers from the session cache, these extensions safely retrieve `DepartmentId` and `JobProfileId`.
+
+<Tabs>
+  <TabItem label="Extensions/SessionExtensions.cs" icon="document">
+    ```csharp
+    namespace TimeManager.Backend.Extensions
+    {
+        public static class SessionExtensions
+        {
+            public static int? GetDepartmentId(this ISession session)
+                => session.GetInt32("DepartmentId");
+
+            public static int? GetCurrentUserJobProfileId(this ISession session)
+                => session.GetInt32("JobProfileId");
+        }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Example Usage" icon="setting">
+    ```csharp
+    public IActionResult Index()
+    {
+        // Instead of: HttpContext.Session.GetInt32("DepartmentId");
+        int? departmentId = HttpContext.Session.GetDepartmentId();
+
+        if (departmentId == null)
+        {
+            return RedirectToAction("Login", "Auth");
+        }
+
+        return View();
+    }
+    ```
+  </TabItem>
+</Tabs>
